@@ -1,44 +1,24 @@
-{
-  "compilerOptions": {
-    "baseUrl": ".",
-    "lib": [
-      "DOM",
-      "DOM.Iterable",
-      "ES2022"
-    ],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "preserve",
-    "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@payload-config": [
-        "./payload.config.ts"
-      ]
-    },
-    "target": "ES2022"
+// next.config.js – FINAL VERSION THAT WORKS ON RENDER
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  transpilePackages: ['payload'],
+  experimental: {
+    missingSuspenseWithCSRBailout: false,
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@payload-config': path.resolve(__dirname, 'payload.config.ts'),
+    }
+    return config
+  },
 }
+
+export default nextConfig
