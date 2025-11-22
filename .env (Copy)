@@ -1,0 +1,22 @@
+# --- PAYLOAD CORE ---
+NODE_ENV=development
+HOST=http://localhost
+PORT=3000
+DATABASE_URI=mongodb://127.0.0.1/artrealmai-payload
+PAYLOAD_SECRET=422e1b696184b7e4b703d9e8
+
+# --- CLOUDFLARE R2 CREDENTIALS (REQUIRED) ---
+# NOTE: YOU MUST REPLACE THESE PLACEHOLDERS WITH YOUR ACTUAL SECRETS.
+R2_ACCESS_KEY_ID="92220bda74de42c320c30b2351f7a975"
+R2_SECRET_ACCESS_KEY="5cdbedf6e2bb2929e59ae77f0caa29a5b2526c613e6357909a5662253988bfa7"
+R2_BUCKET="artrealmai"
+R2_REGION="auto"
+
+# --- CLOUDFLARE R2 ENDPOINT & PUBLIC DOMAIN ---
+# 1. R2_ENDPOINT: The S3 API endpoint for file transfer (e.g., your-account-id.r2.cloudflarestorage.com)
+R2_ENDPOINT="067612f880368870377805060514122f.r2.cloudflarestorage.com"
+# 2. R2_PUBLIC_ACCESS_DOMAIN: The public facing URL for displaying images (e.g., pub-xxxxxxxx.r2.dev)
+R2_PUBLIC_ACCESS_DOMAIN="https://artrealmai.r2.cloudflarestorage.com"
+PAYLOAD_SECRET=super-long-secret-at-least-32-chars-1234567890
+DATABASE_URI=mongodb+srv://artrealmai:NvJX0JvjlIJ6165P@artrealmai-db.6qk5i0s.mongodb.net/?appName=ArtRealmAI-db
+
