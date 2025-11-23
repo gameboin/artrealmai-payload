@@ -1,5 +1,5 @@
-// collections/Users.ts
-import type { CollectionConfig, User } from 'payload'
+// collections/Users.ts — FINAL WORKING VERSION
+import type { CollectionConfig } from 'payload'
 
 export const Users: CollectionConfig = {
   slug: 'users',
@@ -8,11 +8,13 @@ export const Users: CollectionConfig = {
     defaultColumns: ['email', 'role'],
   },
   auth: true,
+  // THIS IS THE KEY — allow admins to do everything
   access: {
     create: () => true,
-    // This is the ONLY line that works without type errors
-    update: ({ req }) => (req.user as User & { role?: 'admin' | 'user' })?.role === 'admin',
-    delete: ({ req }) => (req.user as User & { role?: 'admin' | 'user' })?.role === 'admin',
+    read: () => true,
+    update: ({ req }) => req.user?.role === 'admin',
+    delete: ({ req }) => req.user?.role === 'admin',
+    admin: ({ req }) => req.user?.role === 'admin', // unlocks the UI
   },
   fields: [
     {
@@ -26,6 +28,10 @@ export const Users: CollectionConfig = {
       options: ['user', 'admin'],
       defaultValue: 'user',
       required: true,
+      access: {
+        // Only admins can change roles
+        update: ({ req }) => req.user?.role === 'admin',
+      },
       admin: {
         position: 'sidebar',
       },
