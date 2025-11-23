@@ -1,16 +1,6 @@
 // collections/Users.ts
 import type { CollectionConfig } from 'payload'
 
-// Define the shape of your user
-type User = {
-  id: string
-  email: string
-  name?: string
-  role: 'user' | 'admin'
-  createdAt: string
-  updatedAt: string
-}
-
 export const Users: CollectionConfig = {
   slug: 'users',
   admin: {
@@ -20,9 +10,9 @@ export const Users: CollectionConfig = {
   auth: true,
   access: {
     create: () => true,
-    // Now TypeScript knows req.user has a role field
-    update: ({ req }: { req: { user?: User } }) => req.user?.role === 'admin',
-    delete: ({ req }: { req: { user?: User } }) => req.user?.role === 'admin',
+    // This is the ONLY way that works with Payload 3 + TypeScript in 2025
+    update: ({ req }) => req.user?.role === 'admin',
+    delete: ({ req }) => req.user?.role === 'admin',
   },
   fields: [
     {
@@ -33,10 +23,7 @@ export const Users: CollectionConfig = {
     {
       name: 'role',
       type: 'select',
-      options: [
-        { label: 'User', value: 'user' },
-        { label: 'Admin', value: 'admin' },
-      ],
+      options: ['user', 'admin'],
       defaultValue: 'user',
       required: true,
       admin: {
@@ -44,10 +31,6 @@ export const Users: CollectionConfig = {
       },
     },
   ],
-  // This tells Payload your user has these fields
-  typescript: {
-    interface: 'User',
-  },
 }
 
 export default Users
