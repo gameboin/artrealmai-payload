@@ -1,4 +1,4 @@
-// src/collections/Users.ts
+// collections/Users.ts
 import type { CollectionConfig } from 'payload'
 
 export const Users: CollectionConfig = {
@@ -9,22 +9,16 @@ export const Users: CollectionConfig = {
   },
   auth: true,
   access: {
-    // Anyone can register (you already did this)
     create: () => true,
-    // Only admins can edit/delete users
+    // Fix: Type-safe way to check role
     update: ({ req }) => req.user?.role === 'admin',
     delete: ({ req }) => req.user?.role === 'admin',
   },
   fields: [
-    // Email & password added automatically by auth: true
-
     {
       name: 'name',
       type: 'text',
-      required: false,
-      admin: {
-        position: 'sidebar',
-      },
+      admin: { position: 'sidebar' },
     },
     {
       name: 'role',
@@ -40,6 +34,10 @@ export const Users: CollectionConfig = {
       },
     },
   ],
+  // THIS LINE FIXES THE TYPE ERROR — tells Payload your user has a 'role' field
+  typescript: {
+    interface: 'User',
+  },
 }
 
 export default Users
