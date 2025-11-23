@@ -8,7 +8,7 @@ export const Authors: CollectionConfig = {
     defaultColumns: ['name', 'portrait'],
   },
   access: {
-    read: () => true, // Public can see authors
+    read: () => true,
     create: ({ req }) => req.user?.role === 'admin',
     update: ({ req }) => req.user?.role === 'admin',
     delete: ({ req }) => req.user?.role === 'admin',

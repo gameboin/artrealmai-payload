@@ -8,7 +8,7 @@ export const Tags: CollectionConfig = {
     defaultColumns: ['name', 'slug'],
   },
   access: {
-    read: () => true, // Public can see tags
+    read: () => true,
     create: ({ req }) => req.user?.role === 'admin',
     update: ({ req }) => req.user?.role === 'admin',
     delete: ({ req }) => req.user?.role === 'admin',

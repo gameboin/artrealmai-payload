@@ -8,9 +8,7 @@ export const Articles: CollectionConfig = {
     defaultColumns: ['title', 'author', 'publishedDate', 'status'],
   },
   access: {
-    // Public can read
     read: () => true,
-    // Only admins can create, update, delete
     create: ({ req }) => req.user?.role === 'admin',
     update: ({ req }) => req.user?.role === 'admin',
     delete: ({ req }) => req.user?.role === 'admin',

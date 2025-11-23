@@ -8,7 +8,7 @@ export const Media: CollectionConfig = {
     defaultColumns: ['filename', 'alt', 'updatedAt'],
   },
   access: {
-    read: () => true, // Public can view images
+    read: () => true,
     create: ({ req }) => req.user?.role === 'admin',
     update: ({ req }) => req.user?.role === 'admin',
     delete: ({ req }) => req.user?.role === 'admin',
