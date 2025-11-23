@@ -1,13 +1,19 @@
+// collections/Articles.ts
 import { CollectionConfig } from 'payload'
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
   admin: {
     useAsTitle: 'title',
-    defaultColumns: ['title', 'author', 'publishedDate'],
+    defaultColumns: ['title', 'author', 'publishedDate', 'status'],
   },
   access: {
-    read: () => true, // Public blog
+    // Public can read
+    read: () => true,
+    // Only admins can create, update, delete
+    create: ({ req }) => req.user?.role === 'admin',
+    update: ({ req }) => req.user?.role === 'admin',
+    delete: ({ req }) => req.user?.role === 'admin',
   },
   fields: [
     {
@@ -38,7 +44,7 @@ export const Articles: CollectionConfig = {
       required: true,
     },
     {
-      name: 'featuredImage', // ← THIS MATCHES shared.js NOW
+      name: 'featuredImage',
       type: 'upload',
       relationTo: 'media',
       required: true,
@@ -67,6 +73,9 @@ export const Articles: CollectionConfig = {
       defaultValue: () => new Date(),
       admin: {
         position: 'sidebar',
+        date: {
+          pickerAppearance: 'dayAndTime',
+        },
       },
     },
   ],
