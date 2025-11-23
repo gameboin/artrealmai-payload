@@ -1,5 +1,5 @@
 // collections/Users.ts
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, User } from 'payload'
 
 export const Users: CollectionConfig = {
   slug: 'users',
@@ -10,9 +10,9 @@ export const Users: CollectionConfig = {
   auth: true,
   access: {
     create: () => true,
-    // This is the ONLY way that works with Payload 3 + TypeScript in 2025
-    update: ({ req }) => req.user?.role === 'admin',
-    delete: ({ req }) => req.user?.role === 'admin',
+    // This is the ONLY line that works without type errors
+    update: ({ req }) => (req.user as User & { role?: 'admin' | 'user' })?.role === 'admin',
+    delete: ({ req }) => (req.user as User & { role?: 'admin' | 'user' })?.role === 'admin',
   },
   fields: [
     {
