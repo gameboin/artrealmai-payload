@@ -9,9 +9,9 @@ export const Authors: CollectionConfig = {
   },
   access: {
     read: () => true,
-    create: ({ req }) => (req.user as any)?.role === 'admin',
-    update: ({ req }) => (req.user as any)?.role === 'admin',
-    delete: ({ req }) => (req.user as any)?.role === 'admin',
+    create: ({ req }) => req.user?.role === 'admin',
+    update: ({ req }) => req.user?.role === 'admin',
+    delete: ({ req }) => req.user?.role === 'admin',
   },
   fields: [
     {
