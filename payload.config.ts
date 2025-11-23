@@ -39,14 +39,13 @@ export default buildConfig({
     'https://artrealmai.com',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
-    // Add your Render URL when going to production if you want
-    // 'https://artrealmai-payload.onrender.com',
+    'https://artrealmai-payload.onrender.com',
   ],
   csrf: [
     'https://artrealmai.com',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
-    // 'https://artrealmai-payload.onrender.com',
+    'https://artrealmai-payload.onrender.com',
   ],
   // ←←← END OF ADDITION ←←←
 
