@@ -1,4 +1,4 @@
-// collections/Users.ts — FINAL VERSION THAT WORKS ON RENDER
+// collections/Users.ts
 import type { CollectionConfig } from 'payload'
 
 export const Users: CollectionConfig = {
@@ -11,10 +11,10 @@ export const Users: CollectionConfig = {
   access: {
     create: () => true,
     read: () => true,
-    // THIS LINE IS THE ONLY ONE THAT WORKS — type assertion with proper typing
-    update: ({ req }) => (req.user as { role?: 'user' | 'admin' })?.role === 'admin',
-    delete: ({ req }) => (req.user as { role?: 'user' | 'admin' })?.role === 'admin',
-    admin: ({ req }) => (req.user as { role?: 'user' | 'admin' })?.role === 'admin',
+    // Type assertion fixes the error — treats req.user as having 'role'
+    update: ({ req }) => (req.user as any)?.role === 'admin',
+    delete: ({ req }) => (req.user as any)?.role === 'admin',
+    admin: ({ req }) => (req.user as any)?.role === 'admin',
   },
   fields: [
     {
