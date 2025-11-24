@@ -5,7 +5,7 @@ export const Tags: CollectionConfig = {
   slug: 'tags',
   admin: {
     useAsTitle: 'name',
-    defaultColumns: ['name', 'slug'],
+    defaultColumns: ['name', 'slug', 'order'],
   },
   access: {
     read: () => true,
@@ -26,6 +26,15 @@ export const Tags: CollectionConfig = {
       required: true,
       unique: true,
       index: true,
+      admin: {
+        position: 'sidebar',
+      },
+    },
+    {
+      name: 'order',
+      type: 'number',
+      required: true,
+      defaultValue: 0,
       admin: {
         position: 'sidebar',
       },
