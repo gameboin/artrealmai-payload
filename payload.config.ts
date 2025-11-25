@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & BULLETPROOF (November 26, 2025)
+// payload.config.ts – FINAL & PERFECT (Avatar Upload Fixed)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -16,6 +16,18 @@ import { Media } from './collections/Media'
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
+// Type augmentation — fixes TS errors
+declare module 'payload/types' {
+  export interface User {
+    name?: string
+    avatar?: {
+      id: string
+      url: string
+    }
+    roles?: ('user' | 'admin')[]
+  }
+}
+
 export default buildConfig({
   admin: {
     user: Users.slug,
@@ -25,6 +37,7 @@ export default buildConfig({
   },
 
   collections: [
+    // USERS — Full auth + avatar + roles
     {
       ...Users,
       slug: 'users',
@@ -74,7 +87,28 @@ export default buildConfig({
         },
       ],
     },
-    Media,
+
+    // MEDIA — FIXED: Users can now upload!
+    {
+      ...Media,
+      slug: 'media',
+      access: {
+        read: () => true,                    // Images are public
+        create: ({ req: { user } }) => !!user,   // Only logged-in users can upload
+        update: ({ req: { user } }) => !!user,
+        delete: ({ req: { user } }) => !!user,
+      },
+      upload: {
+        staticURL: '/media',
+        staticDir: 'media',
+        mimeTypes: ['image/*'],
+        imageSizes: [
+          { name: 'thumbnail', width: 400, height: 400, fit: 'cover' },
+          { name: 'medium', width: 800, fit: 'cover' },
+        ],
+      },
+    },
+
     Authors,
     Articles,
     Tags,
