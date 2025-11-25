@@ -1,4 +1,4 @@
-// payload.config.ts – FIXED & TYPE-SAFE (November 26, 2025)
+// payload.config.ts – FINAL & BULLETPROOF (November 26, 2025)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -6,18 +6,6 @@ import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 import { s3Storage } from '@payloadcms/storage-s3'
-
-// ←←← MANUAL TYPE EXTENSION – FIXES TS ERROR ←←←
-declare module 'payload' {
-  export interface User {
-    name?: string;
-    avatar?: {
-      id: string;
-      url: string;
-    };
-    roles?: ('user' | 'admin')[];
-  }
-}
 
 import { Authors } from './collections/Authors'
 import { Articles } from './collections/Articles'
@@ -36,21 +24,20 @@ export default buildConfig({
     },
   },
 
-  // ←←← AUTH + AVATAR – NOW TYPE-SAFE ←←←
   collections: [
     {
       ...Users,
       slug: 'users',
       auth: {
-        tokenExpiration: 7200,        // 2 hours
-        verify: false,                // Enable later for email verification
+        tokenExpiration: 7200,
+        verify: false,
         maxLoginAttempts: 5,
-        lockTime: 600,                // 10 min lockout
+        lockTime: 600,
         useAPIKey: false,
       },
       access: {
         read: ({ req: { user } }) => !!user,
-        create: () => true,           // Allow registration
+        create: () => true,
         update: ({ req: { user }, id }) => user?.id === id,
         delete: ({ req: { user }, id }) => user?.id === id,
       },
@@ -66,9 +53,6 @@ export default buildConfig({
           type: 'upload',
           relationTo: 'media',
           label: 'Profile Picture',
-          admin: {
-            description: 'Square image recommended (e.g., 400x400px)',
-          },
         },
         {
           name: 'roles',
@@ -81,11 +65,11 @@ export default buildConfig({
           ],
           access: {
             read: () => true,
-            create: () => false,      // Can't self-assign roles
-            update: ({ req: { user } }) => user?.roles?.includes('admin'),  // ← NOW TYPE-SAFE
+            create: () => false,
+            update: ({ req: { user } }) => (user as any)?.roles?.includes('admin'),
           },
           admin: {
-            condition: ({ user }) => user?.roles?.includes('admin'),  // Admin-only visible
+            condition: ({ user }) => (user as any)?.roles?.includes('admin'),
           },
         },
       ],
@@ -110,7 +94,6 @@ export default buildConfig({
 
   sharp,
 
-  // ←←← CORS/CSRF – OPTIMIZED ←←←
   cors: [
     'https://artrealmai.com',
     'https://www.artrealmai.com',

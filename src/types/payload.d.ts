@@ -1,9 +1,13 @@
 // src/types/payload.d.ts
-import 'payload'
+import 'payload/types'
 
-declare module 'payload' {
+declare module 'payload/types' {
   export interface User {
-    role: 'user' | 'admin'
     name?: string
+    avatar?: {
+      id: string
+      url: string
+    }
+    roles?: ('user' | 'admin')[]
   }
 }
