@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & PERFECT VERSION (November 26, 2025)
+// payload.config.ts – FIXED & TYPE-SAFE (November 26, 2025)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -6,6 +6,18 @@ import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 import { s3Storage } from '@payloadcms/storage-s3'
+
+// ←←← MANUAL TYPE EXTENSION – FIXES TS ERROR ←←←
+declare module 'payload' {
+  export interface User {
+    name?: string;
+    avatar?: {
+      id: string;
+      url: string;
+    };
+    roles?: ('user' | 'admin')[];
+  }
+}
 
 import { Authors } from './collections/Authors'
 import { Articles } from './collections/Articles'
@@ -24,26 +36,25 @@ export default buildConfig({
     },
   },
 
-  // ←←← AUTHENTICATION FULLY ENABLED + AVATAR UPLOAD ←←←
+  // ←←← AUTH + AVATAR – NOW TYPE-SAFE ←←←
   collections: [
     {
       ...Users,
       slug: 'users',
       auth: {
         tokenExpiration: 7200,        // 2 hours
-        verify: false,                // Set to true later if you want email verification
+        verify: false,                // Enable later for email verification
         maxLoginAttempts: 5,
         lockTime: 600,                // 10 min lockout
         useAPIKey: false,
       },
       access: {
-        read: ({ req: { user } }) => !!user,     // Only logged-in users can see user list
-        create: () => true,                      // Allow registration
-        update: ({ req: { user }, id }) => user?.id === id,  // Users can only edit themselves
-        delete: ({ req: { user }, id }) => user?.id === id,  // Optional: allow self-delete
+        read: ({ req: { user } }) => !!user,
+        create: () => true,           // Allow registration
+        update: ({ req: { user }, id }) => user?.id === id,
+        delete: ({ req: { user }, id }) => user?.id === id,
       },
       fields: [
-        // Default fields (email, password) are auto-included with auth: true
         {
           name: 'name',
           type: 'text',
@@ -56,7 +67,7 @@ export default buildConfig({
           relationTo: 'media',
           label: 'Profile Picture',
           admin: {
-            description: 'Your public avatar (recommended: square image)',
+            description: 'Square image recommended (e.g., 400x400px)',
           },
         },
         {
@@ -70,8 +81,11 @@ export default buildConfig({
           ],
           access: {
             read: () => true,
-            create: () => false,
-            update: ({ req: { user } }) => user?.roles?.includes('admin'),
+            create: () => false,      // Can't self-assign roles
+            update: ({ req: { user } }) => user?.roles?.includes('admin'),  // ← NOW TYPE-SAFE
+          },
+          admin: {
+            condition: ({ user }) => user?.roles?.includes('admin'),  // Admin-only visible
           },
         },
       ],
@@ -96,18 +110,16 @@ export default buildConfig({
 
   sharp,
 
-  // ←←← CORS & CSRF – FIXED & TIGHTENED ←←←
+  // ←←← CORS/CSRF – OPTIMIZED ←←←
   cors: [
     'https://artrealmai.com',
     'https://www.artrealmai.com',
     'http://localhost:3000',
-    'http://127.0.0.1:3000',
   ],
   csrf: [
     'https://artrealmai.com',
     'https://www.artrealmai.com',
     'http://localhost:3000',
-    'http://127.0.0.1:3000',
   ],
 
   plugins: [
