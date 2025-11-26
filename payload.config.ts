@@ -11,10 +11,13 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 export default buildConfig({
-  admin: { user: 'users', importMap: { baseDir: path.resolve(dirname) } },
+  admin: {
+    user: 'users',
+    importMap: { baseDir: path.resolve(dirname) },
+  },
 
   collections: [
-    // USERS — AVATAR UPDATE NOW ALLOWED
+    // USERS — Avatar update allowed
     {
       slug: 'users',
       auth: { tokenExpiration: 7200 },
@@ -22,7 +25,6 @@ export default buildConfig({
         read: () => true,
         create: () => true,
         update: ({ req: { user } }) => !!user,
-        delete: ({ req: { user } }) => !!user,
       },
       fields: [
         { name: 'name', type: 'text', required: true },
@@ -30,8 +32,9 @@ export default buildConfig({
           name: 'avatar',
           type: 'upload',
           relationTo: 'media',
+          // This allows updating the avatar field from API
           access: {
-            update: ({ req: { user } }) => !!user,  // ← THIS WAS THE MISSING LINE
+            update: ({ req: { user } }) => !!user,
           },
         },
         {
@@ -44,7 +47,7 @@ export default buildConfig({
       ],
     },
 
-    // MEDIA — Already correct
+    // MEDIA — Logged-in users can upload
     {
       slug: 'media',
       upload: true,
