@@ -4,10 +4,7 @@ import 'payload/types'
 declare module 'payload/types' {
   export interface User {
     name?: string
-    avatar?: {
-      id: string
-      url: string
-    }
+    avatar?: { id: string; url: string }
     roles?: ('user' | 'admin')[]
   }
 }
