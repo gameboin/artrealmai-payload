@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL, CLEAN, BUILD SUCCESSFUL (NO TYPE DECLARATIONS HERE)
+// payload.config.ts – FINAL, CLEAN, BUILD SUCCESSFUL (November 26, 2025)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -17,7 +17,7 @@ export default buildConfig({
   },
 
   collections: [
-    // USERS — FULLY INLINE
+    // USERS — Full inline
     {
       slug: 'users',
       auth: {
@@ -45,10 +45,10 @@ export default buildConfig({
       ],
     },
 
-    // MEDIA — UPLOADS WORK
+    // MEDIA — S3 ONLY (no staticURL/staticDir)
     {
       slug: 'media',
-      upload: { staticURL: '/media', staticDir: 'media', mimeTypes: ['image/*'] },
+      upload: true, // This enables uploads
       access: {
         read: () => true,
         create: ({ req: { user } }) => !!user,
@@ -58,7 +58,7 @@ export default buildConfig({
       fields: [{ name: 'alt', type: 'text' }],
     },
 
-    // Your other collections (keep your real ones!)
+    // Your other collections
     { slug: 'articles', fields: [{ name: 'title', type: 'text' }] },
     { slug: 'tags', fields: [{ name: 'name', type: 'text' }] },
     { slug: 'authors', fields: [{ name: 'name', type: 'text' }] },
