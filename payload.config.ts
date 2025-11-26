@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & PERFECT (Avatar Upload Fixed)
+// payload.config.ts – FINAL & BUILD-PROOF (No Users.ts needed)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -10,43 +10,35 @@ import { s3Storage } from '@payloadcms/storage-s3'
 import { Authors } from './collections/Authors'
 import { Articles } from './collections/Articles'
 import { Tags } from './collections/Tags'
-import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
-// Type augmentation — fixes TS errors
+// Type augmentation — fixes TS
 declare module 'payload/types' {
   export interface User {
     name?: string
-    avatar?: {
-      id: string
-      url: string
-    }
+    avatar?: { id: string; url: string }
     roles?: ('user' | 'admin')[]
   }
 }
 
 export default buildConfig({
   admin: {
-    user: Users.slug,
-    importMap: {
-      baseDir: path.resolve(dirname),
-    },
+    user: 'users', // ← now just the slug
+    importMap: { baseDir: path.resolve(dirname) },
   },
 
   collections: [
-    // USERS — Full auth + avatar + roles
+    // FULL USERS COLLECTION — INLINE (no Users.ts file needed!)
     {
-      ...Users,
       slug: 'users',
       auth: {
         tokenExpiration: 7200,
         verify: false,
         maxLoginAttempts: 5,
         lockTime: 600,
-        useAPIKey: false,
       },
       access: {
         read: ({ req: { user } }) => !!user,
@@ -55,18 +47,8 @@ export default buildConfig({
         delete: ({ req: { user }, id }) => user?.id === id,
       },
       fields: [
-        {
-          name: 'name',
-          type: 'text',
-          required: true,
-          label: 'Full Name',
-        },
-        {
-          name: 'avatar',
-          type: 'upload',
-          relationTo: 'media',
-          label: 'Profile Picture',
-        },
+        { name: 'name', type: 'text', required: true, label: 'Full Name' },
+        { name: 'avatar', type: 'upload', relationTo: 'media', label: 'Profile Picture' },
         {
           name: 'roles',
           type: 'select',
@@ -81,20 +63,18 @@ export default buildConfig({
             create: () => false,
             update: ({ req: { user } }) => (user as any)?.roles?.includes('admin'),
           },
-          admin: {
-            condition: ({ user }) => (user as any)?.roles?.includes('admin'),
-          },
+          admin: { condition: ({ user }) => (user as any)?.roles?.includes('admin') },
         },
       ],
     },
 
-    // MEDIA — FIXED: Users can now upload!
+    // MEDIA — Uploads now work!
     {
       ...Media,
       slug: 'media',
       access: {
-        read: () => true,                    // Images are public
-        create: ({ req: { user } }) => !!user,   // Only logged-in users can upload
+        read: () => true,
+        create: ({ req: { user } }) => !!user,
         update: ({ req: { user } }) => !!user,
         delete: ({ req: { user } }) => !!user,
       },
@@ -102,10 +82,6 @@ export default buildConfig({
         staticURL: '/media',
         staticDir: 'media',
         mimeTypes: ['image/*'],
-        imageSizes: [
-          { name: 'thumbnail', width: 400, height: 400, fit: 'cover' },
-          { name: 'medium', width: 800, fit: 'cover' },
-        ],
       },
     },
 
@@ -115,29 +91,13 @@ export default buildConfig({
   ],
 
   editor: lexicalEditor(),
-
   secret: process.env.PAYLOAD_SECRET || 'fallback-secret-change-in-prod',
-
-  typescript: {
-    outputFile: path.resolve(dirname, 'payload-types.ts'),
-  },
-
-  db: mongooseAdapter({
-    url: process.env.DATABASE_URI || '',
-  }),
-
+  typescript: { outputFile: path.resolve(dirname, 'payload-types.ts') },
+  db: mongooseAdapter({ url: process.env.DATABASE_URI || '' }),
   sharp,
 
-  cors: [
-    'https://artrealmai.com',
-    'https://www.artrealmai.com',
-    'http://localhost:3000',
-  ],
-  csrf: [
-    'https://artrealmai.com',
-    'https://www.artrealmai.com',
-    'http://localhost:3000',
-  ],
+  cors: ['https://artrealmai.com', 'https://www.artrealmai.com', 'http://localhost:3000'],
+  csrf: ['https://artrealmai.com', 'https://www.artrealmai.com', 'http://localhost:3000'],
 
   plugins: [
     s3Storage({
