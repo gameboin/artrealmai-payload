@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & 100% WORKING (Avatar Upload Fixed)
+// payload.config.ts
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -11,7 +11,10 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 export default buildConfig({
-  admin: { user: 'users', importMap: { baseDir: path.resolve(dirname) } },
+  admin: {
+    user: 'users',
+    importMap: { baseDir: path.resolve(dirname) },
+  },
 
   collections: [
     {
@@ -28,9 +31,8 @@ export default buildConfig({
           name: 'avatar',
           type: 'upload',
           relationTo: 'media',
-          // THIS IS THE REAL FIX — DISABLES PAYLOAD'S UPLOAD FIELD LOCK
           access: {
-            update: () => true,  // ← THIS LINE UNLOCKS AVATAR UPLOAD
+            update: () => true, // This unlocks avatar field in auth context
           },
         },
         {
@@ -38,7 +40,10 @@ export default buildConfig({
           type: 'select',
           hasMany: true,
           defaultValue: ['user'],
-          options: ['user', 'admin'].map(v => ({ label: v.charAt(0).toUpperCase() + v.slice(1), value: v })),
+          options: ['user', 'admin'].map(v => ({
+            label: v.charAt(0).toUpperCase() + v.slice(1),
+            value: v,
+          })),
         },
       ],
     },
@@ -48,11 +53,14 @@ export default buildConfig({
       upload: true,
       access: {
         read: () => true,
-        create: () => true,   // TEMP: Allow upload
-        update: () => true,
-        delete: () => true,
+        // CRITICAL FIX: Only logged-in users can create media
+        create: ({ req }) => !!req.user,
+        update: ({ req }) => !!req.user,
+        delete: ({ req }) => req.user?.roles?.includes('admin') || false,
       },
-      fields: [{ name: 'alt', type: 'text' }],
+      fields: [
+        { name: 'alt', type: 'text' },
+      ],
     },
 
     { slug: 'articles', fields: [{ name: 'title', type: 'text' }] },
