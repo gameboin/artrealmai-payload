@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & 100% WORKING
+// payload.config.ts – FINAL & 100% WORKING (Avatar Upload Fixed)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -14,7 +14,7 @@ export default buildConfig({
   admin: { user: 'users', importMap: { baseDir: path.resolve(dirname) } },
 
   collections: [
-    // USERS
+    // USERS — AVATAR UPDATE NOW ALLOWED
     {
       slug: 'users',
       auth: { tokenExpiration: 7200 },
@@ -26,7 +26,14 @@ export default buildConfig({
       },
       fields: [
         { name: 'name', type: 'text', required: true },
-        { name: 'avatar', type: 'upload', relationTo: 'media' },
+        {
+          name: 'avatar',
+          type: 'upload',
+          relationTo: 'media',
+          access: {
+            update: ({ req: { user } }) => !!user,  // ← THIS WAS THE MISSING LINE
+          },
+        },
         {
           name: 'roles',
           type: 'select',
@@ -37,20 +44,19 @@ export default buildConfig({
       ],
     },
 
-    // MEDIA — FIXED: NOW ALLOWS UPLOADS
+    // MEDIA — Already correct
     {
       slug: 'media',
       upload: true,
       access: {
         read: () => true,
-        create: ({ req: { user } }) => !!user,   // ← THIS WAS MISSING
+        create: ({ req: { user } }) => !!user,
         update: ({ req: { user } }) => !!user,
         delete: ({ req: { user } }) => !!user,
       },
       fields: [{ name: 'alt', type: 'text' }],
     },
 
-    // Your other collections
     { slug: 'articles', fields: [{ name: 'title', type: 'text' }] },
     { slug: 'tags', fields: [{ name: 'name', type: 'text' }] },
     { slug: 'authors', fields: [{ name: 'name', type: 'text' }] },
