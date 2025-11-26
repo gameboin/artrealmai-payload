@@ -1,28 +1,21 @@
 // src/types/payload.d.ts
 
-import type { User as BaseUser } from 'payload/auth'
+import type { User as BasePayloadUser } from 'payload/auth'
 
 declare module 'payload' {
-  export interface AuthenticatedUser extends BaseUser {
+  // This extends the user object that Payload puts on req.user
+  export interface AuthenticatedUser extends BasePayloadUser {
     collection: 'users'
     name?: string
-    avatar?: {
-      id: string
-      url: string
-      filename: string
-      mimeType: string
-      filesize: number
-      width?: number
-      height?: number
-    } | null
+    avatar?: any // or full media shape if you want strict typing
     roles?: ('user' | 'admin')[]
   }
 }
 
-// This is the part that makes req.user.roles work in access controls
+// This is the critical part — it tells TypeScript what req.user looks like in access control
 declare module 'payload/types' {
   interface PayloadRequest {
-    user: AuthenticatedUser | null | null
+    user: AuthenticatedUser | null
   }
 }
 
