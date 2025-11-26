@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & 100% WORKING (Homepage + Avatar Fixed)
+// payload.config.ts – FINAL & 100% WORKING
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 import { s3Storage } from '@payloadcms/storage-s3'
 
-// Import your real collections (RESTORED)
+// Import collections — CORRECT PATH
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { Articles } from './collections/Articles'
@@ -23,13 +23,7 @@ export default buildConfig({
     importMap: { baseDir: path.resolve(dirname) },
   },
 
-  collections: [
-    Users,
-    Media,
-    Articles,
-    Tags,
-    Authors,
-  ],
+  collections: [Users, Media, Articles, Tags, Authors],
 
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'fallback-secret',
