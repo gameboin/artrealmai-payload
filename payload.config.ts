@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & 100% WORKING (Bulk Import Fixed, No RowLabel)
+// payload.config.ts – FINAL & 100% WORKING (Bulk Import + TypeScript Fixed)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -29,7 +29,7 @@ export default buildConfig({
     Tags,
     Authors,
 
-    // PROMPT STYLES — BULK IMPORT WORKS, NO ROWLABEL (SIMPLE & CLEAN)
+    // PROMPT STYLES — BULK IMPORT + FULLY TYPE-SAFE
     {
       slug: 'prompt-styles',
       access: { read: () => true },
@@ -77,7 +77,7 @@ export default buildConfig({
             },
           ],
           admin: {
-            initCollapsed: false,  // Always expanded for easy editing
+            initCollapsed: false,
           },
         },
       ],
@@ -87,12 +87,12 @@ export default buildConfig({
             if ((operation === 'create' || operation === 'update') && data.bulkTerms?.trim()) {
               const newTerms = data.bulkTerms
                 .split(',')
-                .map(t => t.trim())
-                .filter(t => t)
-                .map(text => ({ text }));
+                .map((t: string) => t.trim())  // ← EXPLICIT TYPE
+                .filter((t: string) => t.length > 0)
+                .map((text: string) => ({ text }));
 
               data.terms = [...(data.terms || []), ...newTerms];
-              delete data.bulkTerms;  // Clean up
+              delete data.bulkTerms;
             }
             return data;
           },
