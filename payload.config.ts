@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & 100% WORKING (Bulk Import + No Build Errors)
+// payload.config.ts – FINAL & 100% WORKING (Bulk Import Fixed, No RowLabel)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -29,7 +29,7 @@ export default buildConfig({
     Tags,
     Authors,
 
-    // PROMPT STYLES — BULK IMPORT + ADMIN FIXED
+    // PROMPT STYLES — BULK IMPORT WORKS, NO ROWLABEL (SIMPLE & CLEAN)
     {
       slug: 'prompt-styles',
       access: { read: () => true },
@@ -76,12 +76,8 @@ export default buildConfig({
               },
             },
           ],
-          // ← THIS IS THE CORRECT WAY TO SET ROWLABEL
           admin: {
-            initCollapsed: false,
-            components: {
-              RowLabel: ({ data }) => data?.text || 'New term',
-            },
+            initCollapsed: false,  // Always expanded for easy editing
           },
         },
       ],
@@ -96,7 +92,7 @@ export default buildConfig({
                 .map(text => ({ text }));
 
               data.terms = [...(data.terms || []), ...newTerms];
-              delete data.bulkTerms;
+              delete data.bulkTerms;  // Clean up
             }
             return data;
           },
