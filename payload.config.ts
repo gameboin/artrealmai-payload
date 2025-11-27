@@ -30,42 +30,52 @@ export default buildConfig({
     Authors,
 
     // PROMPT STYLES — DYNAMIC & EDITABLE FROM ADMIN
+{
+  slug: 'prompt-styles',
+  access: { read: () => true },
+  admin: {
+    useAsTitle: 'category',
+    defaultColumns: ['category', 'updatedAt'],
+    description: 'Manage prompt style categories and terms for Prompt Crafter',
+  },
+  fields: [
     {
-      slug: 'prompt-styles',
-      access: { read: () => true },
-      admin: {
-        useAsTitle: 'category',
-        defaultColumns: ['category'],
-        description: 'Manage prompt styles for the Prompt Crafter',
-      },
-      fields: [
-        {
-          name: 'category',
-          type: 'select',
-          required: true,
-          options: [
-            { label: 'Style', value: 'style' },
-            { label: 'Subject', value: 'subject' },
-            { label: 'Lighting', value: 'lighting' },
-            { label: 'Camera', value: 'camera' },
-            { label: 'Composition', value: 'composition' },
-          ],
-        },
-        {
-          name: 'terms',
-          type: 'array',
-          required: true,
-          minRows: 5,
-          fields: [
-            {
-              name: 'text',
-              type: 'text',
-              required: true,
-            },
-          ],
-        },
+      name: 'category',
+      type: 'select',
+      required: true,
+      options: [
+        { label: 'Style', value: 'style' },
+        { label: 'Subject', value: 'subject' },
+        { label: 'Lighting', value: 'lighting' },
+        { label: 'Camera', value: 'camera' },
+        { label: 'Composition', value: 'composition' },
       ],
     },
+    {
+      name: 'terms',
+      type: 'array',
+      label: 'Prompt Terms',
+      required: true,
+      minRows: 1,
+      fields: [
+        {
+          name: 'text',
+          type: 'text',
+          required: true,
+          admin: {
+            placeholder: 'e.g. cyberpunk, oil painting, golden hour...',
+          },
+        },
+      ],
+      admin: {
+        initCollapsed: false,
+        components: {
+          RowLabel: ({ data }) => data?.text || 'New term',
+        },
+      },
+    },
+  ],
+},
 
     // SAVED PROMPTS — For logged-in users
     {
