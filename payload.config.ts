@@ -73,15 +73,15 @@ export default buildConfig({
               required: true,
               admin: {
                 placeholder: 'e.g. cyberpunk',
-                components: {
-                  // FIXED: RowLabel goes here
-                  RowLabel: ({ data }) => data?.text || 'New term',
-                },
               },
             },
           ],
+          // ← THIS IS THE CORRECT WAY TO SET ROWLABEL
           admin: {
             initCollapsed: false,
+            components: {
+              RowLabel: ({ data }) => data?.text || 'New term',
+            },
           },
         },
       ],
