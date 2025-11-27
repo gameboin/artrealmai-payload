@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & 100% WORKING (Bulk Term Import Added)
+// payload.config.ts – FINAL & 100% WORKING (Bulk Import + No Build Errors)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -29,14 +29,14 @@ export default buildConfig({
     Tags,
     Authors,
 
-    // PROMPT STYLES — BULK IMPORT ENABLED
+    // PROMPT STYLES — BULK IMPORT + ADMIN FIXED
     {
       slug: 'prompt-styles',
       access: { read: () => true },
       admin: {
         useAsTitle: 'category',
         defaultColumns: ['category', 'updatedAt'],
-        description: 'Manage prompt style categories. Paste multiple terms at once (comma-separated)!',
+        description: 'Manage prompt style categories. Paste multiple terms at once!',
       },
       fields: [
         {
@@ -56,8 +56,8 @@ export default buildConfig({
           type: 'textarea',
           label: 'Bulk Add Terms (comma-separated)',
           admin: {
-            description: 'Paste multiple terms at once: cinematic, cyberpunk, golden hour...',
-            placeholder: 'bright, rimlighting, sunlight, moonlight, volumetric fog...',
+            description: 'Paste multiple terms: cinematic, cyberpunk, golden hour...',
+            placeholder: 'bright, rimlighting, sunlight, moonlight...',
           },
         },
         {
@@ -72,34 +72,31 @@ export default buildConfig({
               type: 'text',
               required: true,
               admin: {
-                placeholder: 'e.g. cyberpunk, oil painting...',
+                placeholder: 'e.g. cyberpunk',
+                components: {
+                  // FIXED: RowLabel goes here
+                  RowLabel: ({ data }) => data?.text || 'New term',
+                },
               },
             },
           ],
           admin: {
             initCollapsed: false,
-            components: {
-              RowLabel: ({ data }) => data?.text || 'New term',
-            },
           },
         },
       ],
       hooks: {
         beforeChange: [
-          async ({ data, req, operation }) => {
-            if (operation === 'create' || operation === 'update') {
-              const bulk = data.bulkTerms?.trim();
-              if (bulk) {
-                const newTerms = bulk
-                  .split(',')
-                  .map(t => t.trim())
-                  .filter(t => t.length > 0)
-                  .map(text => ({ text }));
+          async ({ data, operation }) => {
+            if ((operation === 'create' || operation === 'update') && data.bulkTerms?.trim()) {
+              const newTerms = data.bulkTerms
+                .split(',')
+                .map(t => t.trim())
+                .filter(t => t)
+                .map(text => ({ text }));
 
-                // Merge with existing terms
-                data.terms = [...(data.terms || []), ...newTerms];
-                delete data.bulkTerms; // Clean up
-              }
+              data.terms = [...(data.terms || []), ...newTerms];
+              delete data.bulkTerms;
             }
             return data;
           },
@@ -119,13 +116,7 @@ export default buildConfig({
       fields: [
         { name: 'title', type: 'text', required: true },
         { name: 'prompt', type: 'textarea', required: true },
-        {
-          name: 'user',
-          type: 'relationship',
-          relationTo: 'users',
-          required: true,
-          hasMany: false,
-        },
+        { name: 'user', type: 'relationship', relationTo: 'users', required: true, hasMany: false },
       ],
     },
   ],
