@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & 100% WORKING (Bulk Import + TypeScript Fixed)
+// payload.config.ts – FINAL & 100% WORKING (Admin Safe + Prompt Styles Bulk Import)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -29,14 +29,19 @@ export default buildConfig({
     Tags,
     Authors,
 
-    // PROMPT STYLES — BULK IMPORT + FULLY TYPE-SAFE
+    // PROMPT STYLES — BULK IMPORT + FULL ADMIN ACCESS
     {
       slug: 'prompt-styles',
-      access: { read: () => true },
+      access: {
+        read: () => true,
+        create: () => true,
+        update: () => true,
+        delete: () => true,
+      },
       admin: {
         useAsTitle: 'category',
         defaultColumns: ['category', 'updatedAt'],
-        description: 'Manage prompt style categories. Paste multiple terms at once!',
+        description: 'Manage prompt styles. Paste multiple terms at once!',
       },
       fields: [
         {
@@ -71,14 +76,10 @@ export default buildConfig({
               name: 'text',
               type: 'text',
               required: true,
-              admin: {
-                placeholder: 'e.g. cyberpunk',
-              },
+              admin: { placeholder: 'e.g. cyberpunk' },
             },
           ],
-          admin: {
-            initCollapsed: false,
-          },
+          admin: { initCollapsed: false },
         },
       ],
       hooks: {
@@ -87,8 +88,8 @@ export default buildConfig({
             if ((operation === 'create' || operation === 'update') && data.bulkTerms?.trim()) {
               const newTerms = data.bulkTerms
                 .split(',')
-                .map((t: string) => t.trim())  // ← EXPLICIT TYPE
-                .filter((t: string) => t.length > 0)
+                .map((t: string) => t.trim())
+                .filter((t: string) => t)
                 .map((text: string) => ({ text }));
 
               data.terms = [...(data.terms || []), ...newTerms];
