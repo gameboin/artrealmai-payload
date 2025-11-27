@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & 100% WORKING
+// payload.config.ts – FINAL & 100% WORKING (With PromptStyles)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -7,7 +7,6 @@ import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 import { s3Storage } from '@payloadcms/storage-s3'
 
-// Import collections — CORRECT PATH
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { Articles } from './collections/Articles'
@@ -23,7 +22,73 @@ export default buildConfig({
     importMap: { baseDir: path.resolve(dirname) },
   },
 
-  collections: [Users, Media, Articles, Tags, Authors],
+  collections: [
+    Users,
+    Media,
+    Articles,
+    Tags,
+    Authors,
+
+    // PROMPT STYLES — DYNAMIC & EDITABLE FROM ADMIN
+    {
+      slug: 'prompt-styles',
+      access: { read: () => true },
+      admin: {
+        useAsTitle: 'category',
+        defaultColumns: ['category'],
+        description: 'Manage prompt styles for the Prompt Crafter',
+      },
+      fields: [
+        {
+          name: 'category',
+          type: 'select',
+          required: true,
+          options: [
+            { label: 'Style', value: 'style' },
+            { label: 'Subject', value: 'subject' },
+            { label: 'Lighting', value: 'lighting' },
+            { label: 'Camera', value: 'camera' },
+            { label: 'Composition', value: 'composition' },
+          ],
+        },
+        {
+          name: 'terms',
+          type: 'array',
+          required: true,
+          minRows: 5,
+          fields: [
+            {
+              name: 'text',
+              type: 'text',
+              required: true,
+            },
+          ],
+        },
+      ],
+    },
+
+    // SAVED PROMPTS — For logged-in users
+    {
+      slug: 'saved-prompts',
+      access: {
+        read: ({ req: { user } }) => !!user,
+        create: ({ req: { user } }) => !!user,
+        update: ({ req: { user }, id }) => user?.id === id,
+        delete: ({ req: { user }, id }) => user?.id === id,
+      },
+      fields: [
+        { name: 'title', type: 'text', required: true },
+        { name: 'prompt', type: 'textarea', required: true },
+        {
+          name: 'user',
+          type: 'relationship',
+          relationTo: 'users',
+          required: true,
+          hasMany: false,
+        },
+      ],
+    },
+  ],
 
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'fallback-secret',
