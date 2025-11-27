@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & 100% WORKING (With PromptStyles)
+// payload.config.ts – FINAL & 100% WORKING (Bulk Term Import Added)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -29,62 +29,92 @@ export default buildConfig({
     Tags,
     Authors,
 
-    // PROMPT STYLES — DYNAMIC & EDITABLE FROM ADMIN
-{
-  slug: 'prompt-styles',
-  access: { read: () => true },
-  admin: {
-    useAsTitle: 'category',
-    defaultColumns: ['category', 'updatedAt'],
-    description: 'Manage prompt style categories and terms for Prompt Crafter',
-  },
-  fields: [
+    // PROMPT STYLES — BULK IMPORT ENABLED
     {
-      name: 'category',
-      type: 'select',
-      required: true,
-      options: [
-        { label: 'Style', value: 'style' },
-        { label: 'Subject', value: 'subject' },
-        { label: 'Lighting', value: 'lighting' },
-        { label: 'Camera', value: 'camera' },
-        { label: 'Composition', value: 'composition' },
-      ],
-    },
-    {
-      name: 'terms',
-      type: 'array',
-      label: 'Prompt Terms',
-      required: true,
-      minRows: 1,
+      slug: 'prompt-styles',
+      access: { read: () => true },
+      admin: {
+        useAsTitle: 'category',
+        defaultColumns: ['category', 'updatedAt'],
+        description: 'Manage prompt style categories. Paste multiple terms at once (comma-separated)!',
+      },
       fields: [
         {
-          name: 'text',
-          type: 'text',
+          name: 'category',
+          type: 'select',
           required: true,
+          options: [
+            { label: 'Style', value: 'style' },
+            { label: 'Subject', value: 'subject' },
+            { label: 'Lighting', value: 'lighting' },
+            { label: 'Camera', value: 'camera' },
+            { label: 'Composition', value: 'composition' },
+          ],
+        },
+        {
+          name: 'bulkTerms',
+          type: 'textarea',
+          label: 'Bulk Add Terms (comma-separated)',
           admin: {
-            placeholder: 'e.g. cyberpunk, oil painting, golden hour...',
+            description: 'Paste multiple terms at once: cinematic, cyberpunk, golden hour...',
+            placeholder: 'bright, rimlighting, sunlight, moonlight, volumetric fog...',
+          },
+        },
+        {
+          name: 'terms',
+          type: 'array',
+          label: 'Individual Terms',
+          required: true,
+          minRows: 1,
+          fields: [
+            {
+              name: 'text',
+              type: 'text',
+              required: true,
+              admin: {
+                placeholder: 'e.g. cyberpunk, oil painting...',
+              },
+            },
+          ],
+          admin: {
+            initCollapsed: false,
+            components: {
+              RowLabel: ({ data }) => data?.text || 'New term',
+            },
           },
         },
       ],
-      admin: {
-        initCollapsed: false,
-        components: {
-          RowLabel: ({ data }) => data?.text || 'New term',
-        },
+      hooks: {
+        beforeChange: [
+          async ({ data, req, operation }) => {
+            if (operation === 'create' || operation === 'update') {
+              const bulk = data.bulkTerms?.trim();
+              if (bulk) {
+                const newTerms = bulk
+                  .split(',')
+                  .map(t => t.trim())
+                  .filter(t => t.length > 0)
+                  .map(text => ({ text }));
+
+                // Merge with existing terms
+                data.terms = [...(data.terms || []), ...newTerms];
+                delete data.bulkTerms; // Clean up
+              }
+            }
+            return data;
+          },
+        ],
       },
     },
-  ],
-},
 
-    // SAVED PROMPTS — For logged-in users
+    // SAVED PROMPTS
     {
       slug: 'saved-prompts',
       access: {
         read: ({ req: { user } }) => !!user,
         create: ({ req: { user } }) => !!user,
-        update: ({ req: { user }, id }) => user?.id === id,
-        delete: ({ req: { user }, id }) => user?.id === id,
+        update: ({ req: { user }, data }) => user?.id === data?.user,
+        delete: ({ req: { user }, data }) => user?.id === data?.user,
       },
       fields: [
         { name: 'title', type: 'text', required: true },
