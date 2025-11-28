@@ -8,9 +8,12 @@ export const Users: CollectionConfig = {
     create: () => true,
     // IMPORTANT: Only allow users to update THEMSELVES
     update: ({ req: { user }, id }) => {
-      if (!user) return false;
-      if (user.roles?.includes('admin')) return true;
-      return user.id === id; 
+      if (!user) return false
+      
+      // FIX: We cast user to 'any' so TypeScript stops complaining about .roles
+      if ((user as any).roles?.includes('admin')) return true
+      
+      return user.id === id
     },
   },
   fields: [
@@ -24,5 +27,4 @@ export const Users: CollectionConfig = {
       options: ['user', 'admin'],
     },
   ],
-  // You can delete the 'beforeChange' hook, it is not needed if Access Control is correct.
 }
