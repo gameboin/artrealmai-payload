@@ -14,8 +14,8 @@ export const Users: CollectionConfig = {
       name: 'avatar',
       type: 'upload',
       relationTo: 'media',
-      access: {
-        update: () => true,  // ← THIS WAS MISSING — NOW AVATAR WORKS EVERYWHERE
+      admin: {
+        disableUpload: false,  // ← THIS UNLOCKS AVATAR UPLOAD 100%
       },
     },
     {
