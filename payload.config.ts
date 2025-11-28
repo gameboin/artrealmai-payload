@@ -182,22 +182,28 @@ export default buildConfig({
   ],
 
   plugins: [
-    s3Storage({
-      collections: {
-        media: {
-          generateFileURL: ({ filename }) =>
-            `https://${process.env.R2_PUBLIC_ACCESS_DOMAIN}/${filename}`,
+  s3Storage({
+    collections: {
+      media: {
+        generateFileURL: ({ filename }) =>
+          `https://${process.env.R2_PUBLIC_ACCESS_DOMAIN}/${filename}`,
+        access: {
+          read: () => true,
+          create: ({ req: { user } }) => !!user,
+          update: ({ req: { user } }) => !!user,
+          delete: ({ req: { user } }) => !!user,
         },
       },
-      bucket: process.env.R2_BUCKET!,
-      config: {
-        endpoint: process.env.R2_ENDPOINT,
-        credentials: {
-          accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-          secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-        },
-        region: 'auto',
+    },
+    bucket: process.env.R2_BUCKET!,
+    config: {
+      endpoint: process.env.R2_ENDPOINT,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
       },
-    }),
-  ],
+      region: 'auto',
+    },
+  }),
+ ],
 })
