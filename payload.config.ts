@@ -131,7 +131,7 @@ export default buildConfig({
         { name: 'title', type: 'text', required: true },
         { name: 'prompt', type: 'textarea', required: true },
         { name: 'user', type: 'relationship', relationTo: 'users', required: true, hasMany: false },
-      ], // <--- FIXED: Changed } to ]
+      ],
     },
   ],
 
@@ -141,12 +141,21 @@ export default buildConfig({
   db: mongooseAdapter({ url: process.env.DATABASE_URI || '' }),
   sharp,
 
-  cors: ['https://artrealmai.com', 'http://localhost:3000'],
+  // UPDATED CORS/CSRF:
+  cors: [
+    'https://artrealmai.com',
+    'https://www.artrealmai.com',
+    'http://localhost:3000',
+    'http://localhost:5500', // Common Live Server port
+    'http://127.0.0.1:5500', 
+  ],
   csrf: [
     'https://artrealmai.com',
     'https://www.artrealmai.com',
     'http://localhost:3000',
-    'https://artrealmai-payload.onrender.com',
+    'http://localhost:5500',
+    'http://127.0.0.1:5500',
+    'https://artrealmai-payload.onrender.com', // Trust self
   ],
 
   plugins: [
