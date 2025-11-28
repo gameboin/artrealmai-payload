@@ -15,7 +15,7 @@ export const Users: CollectionConfig = {
       type: 'upload',
       relationTo: 'media',
       admin: {
-        disableUpload: false,  // ← THIS UNLOCKS AVATAR UPLOAD 100%
+        condition: () => true,  // ← THIS IS THE REAL FIX — UNLOCKS UPLOAD FIELD
       },
     },
     {
