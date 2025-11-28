@@ -10,7 +10,14 @@ export const Users: CollectionConfig = {
   },
   fields: [
     { name: 'name', type: 'text', required: true },
-    { name: 'avatar', type: 'upload', relationTo: 'media' },
+    {
+      name: 'avatar',
+      type: 'upload',
+      relationTo: 'media',
+      access: {
+        update: () => true,  // ← THIS WAS MISSING — NOW AVATAR WORKS EVERYWHERE
+      },
+    },
     {
       name: 'roles',
       type: 'select',
@@ -26,7 +33,7 @@ export const Users: CollectionConfig = {
           await (req.payload as any).update({
             collection: 'users',
             id: user.id,
-            data: { roles: ['user', 'admin'] as any },
+            data: { roles: ['user', 'admin'] },
           });
         }
       },
