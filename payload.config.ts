@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & 100% WORKING (Admin Can Edit Prompt Styles + Bulk Import)
+// payload.config.ts – FINAL & 100% WORKING (CSRF Fixed, Admin Works)
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -34,8 +34,8 @@ export default buildConfig({
       slug: 'prompt-styles',
       access: {
         read: () => true,
-        create: ({ req: { user } }) => !!user,   // ← ADMIN CAN CREATE
-        update: ({ req: { user } }) => !!user,   // ← ADMIN CAN EDIT
+        create: ({ req: { user } }) => !!user,
+        update: ({ req: { user } }) => !!user,
         delete: ({ req: { user } }) => !!user,
       },
       admin: {
@@ -140,8 +140,14 @@ export default buildConfig({
   db: mongooseAdapter({ url: process.env.DATABASE_URI || '' }),
   sharp,
 
+  // ←←← CSRF FIXED — ADMIN WORKS NOW
   cors: ['https://artrealmai.com', 'http://localhost:3000'],
-  csrf: ['https://artrealmai.com', 'http://localhost:3000'],
+  csrf: [
+    'https://artrealmai.com',
+    'https://www.artrealmai.com',
+    'http://localhost:3000',
+    'https://artrealmai-payload.onrender.com',  // ← THIS WAS MISSING
+  ],
 
   plugins: [
     s3Storage({
