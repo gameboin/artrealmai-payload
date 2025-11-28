@@ -6,15 +6,16 @@ export const Users: CollectionConfig = {
   access: {
     read: () => true,
     create: () => true,
-    update: ({ req: { user } }) => !!user,
+    // IMPORTANT: Only allow users to update THEMSELVES
+    update: ({ req: { user }, id }) => {
+      if (!user) return false;
+      if (user.roles?.includes('admin')) return true;
+      return user.id === id; 
+    },
   },
   fields: [
     { name: 'name', type: 'text', required: true },
-    { 
-      name: 'avatar', 
-      type: 'upload', 
-      relationTo: 'media' 
-    },
+    { name: 'avatar', type: 'upload', relationTo: 'media' },
     {
       name: 'roles',
       type: 'select',
@@ -23,28 +24,5 @@ export const Users: CollectionConfig = {
       options: ['user', 'admin'],
     },
   ],
-  hooks: {
-    afterLogin: [
-      async ({ req, user }) => {
-        if (user.email === 'iysun77@protonmail.com') {
-          await (req.payload as any).update({
-            collection: 'users',
-            id: user.id,
-            data: { roles: ['user', 'admin'] as any },
-          });
-        }
-      },
-    ],
-    // ←←← THIS HOOK FIXES AVATAR UPLOAD 100%
-    beforeChange: [
-      async ({ data, req }) => {
-        // Force-allow avatar updates for logged-in users
-        if (req.user && data.avatar !== undefined) {
-          // Bypass upload protection — set as valid relation
-          data.avatar = data.avatar;
-        }
-        return data;
-      },
-    ],
-  },
+  // You can delete the 'beforeChange' hook, it is not needed if Access Control is correct.
 }

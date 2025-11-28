@@ -5,9 +5,11 @@ export const Media: CollectionConfig = {
   upload: true,
   access: {
     read: () => true,
-    create: () => true,
-    update: () => true,
-    delete: () => true,
+    // Only logged-in users can upload. 
+    // If req.user is missing (the real issue), this fails safely.
+    create: ({ req: { user } }) => !!user, 
+    update: ({ req: { user } }) => !!user,
+    delete: ({ req: { user } }) => !!user,
   },
   fields: [{ name: 'alt', type: 'text' }],
 }
