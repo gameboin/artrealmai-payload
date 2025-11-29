@@ -1,16 +1,34 @@
 // payload.config.ts
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
-import { lexicalEditor } from '@payloadcms/richtext-lexical'
+import { 
+  lexicalEditor,
+  HeadingFeature,
+  BlockquoteFeature,
+  LinkFeature,
+  ParagraphFeature,
+  UploadFeature,
+  OrderedListFeature,
+  UnorderedListFeature,
+  ChecklistFeature,      
+  IndentFeature,
+  AlignFeature,
+  HorizontalRuleFeature,
+  BoldFeature,           
+  ItalicFeature,         
+  UnderlineFeature,      
+  StrikethroughFeature,  
+  SubscriptFeature,      
+  SuperscriptFeature,    
+  InlineCodeFeature,     
+  // Removed 'CodeFeature' / 'CodeBlockFeature' to fix the import error
+} from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 import { s3Storage } from '@payloadcms/storage-s3'
 
-// 1. Single Import for ALL Collections
 import { collections } from './collections' 
-
-// Global Imports
 import { GlossaryImporter } from './globals/GlossaryImporter'
 
 const filename = fileURLToPath(import.meta.url)
@@ -18,18 +36,57 @@ const dirname = path.dirname(filename)
 
 export default buildConfig({
   admin: {
-    user: 'users', // Note: Using string slug 'users' is safer here than Users.slug if Users isn't imported directly
+    user: 'users',
     importMap: { baseDir: path.resolve(dirname) },
   },
 
-  // 2. Use the imported array
   collections: collections, 
 
   globals: [
     GlossaryImporter,
   ],
 
-  editor: lexicalEditor(),
+  editor: lexicalEditor({
+    features: ({ defaultFeatures }) => [
+      // 1. defaultFeatures ALREADY includes the Code Block feature!
+      ...defaultFeatures,
+      
+      // 2. We explicitly add the rest to ensure they are active
+      HeadingFeature({ enabledHeadingSizes: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] }),
+      BlockquoteFeature(),
+      LinkFeature({}),
+      ParagraphFeature(),
+      UploadFeature({
+        collections: {
+          media: {
+            fields: [
+              {
+                name: 'caption',
+                type: 'text', 
+                label: 'Caption',
+              },
+            ],
+          },
+        },
+      }),
+      OrderedListFeature(),
+      UnorderedListFeature(),
+      ChecklistFeature(),
+      IndentFeature(),
+      AlignFeature(),
+      HorizontalRuleFeature(),
+      
+      // Text Formats
+      BoldFeature(),
+      ItalicFeature(),
+      UnderlineFeature(),
+      StrikethroughFeature(),
+      SubscriptFeature(), 
+      SuperscriptFeature(), 
+      InlineCodeFeature(), 
+    ],
+  }),
+
   secret: process.env.PAYLOAD_SECRET || 'fallback-secret',
   typescript: { outputFile: path.resolve(dirname, 'payload-types.ts') },
   db: mongooseAdapter({ url: process.env.DATABASE_URI || '' }),
