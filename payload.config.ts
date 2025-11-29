@@ -19,8 +19,9 @@ import {
   StrikethroughFeature,  
   SubscriptFeature,      
   SuperscriptFeature,    
-  InlineCodeFeature,     
-  // Removed 'CodeFeature' / 'CodeBlockFeature' to fix the import error
+  InlineCodeFeature,
+  FixedToolbarFeature, // <--- NEW IMPORT: Adds the top toolbar controls
+  InlineToolbarFeature, // <--- NEW IMPORT: Adds the popup bar on text selection
 } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
@@ -48,10 +49,13 @@ export default buildConfig({
 
   editor: lexicalEditor({
     features: ({ defaultFeatures }) => [
-      // 1. defaultFeatures ALREADY includes the Code Block feature!
       ...defaultFeatures,
       
-      // 2. We explicitly add the rest to ensure they are active
+      // 1. FORCE TOOLBARS TO APPEAR
+      FixedToolbarFeature(),
+      InlineToolbarFeature(),
+
+      // 2. Content Features
       HeadingFeature({ enabledHeadingSizes: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] }),
       BlockquoteFeature(),
       LinkFeature({}),
@@ -59,13 +63,7 @@ export default buildConfig({
       UploadFeature({
         collections: {
           media: {
-            fields: [
-              {
-                name: 'caption',
-                type: 'text', 
-                label: 'Caption',
-              },
-            ],
+            fields: [{ name: 'caption', type: 'text', label: 'Caption' }],
           },
         },
       }),
@@ -76,7 +74,7 @@ export default buildConfig({
       AlignFeature(),
       HorizontalRuleFeature(),
       
-      // Text Formats
+      // 3. Text Formatting
       BoldFeature(),
       ItalicFeature(),
       UnderlineFeature(),
