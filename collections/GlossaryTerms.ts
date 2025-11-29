@@ -7,7 +7,10 @@ export const GlossaryTerms: CollectionConfig = {
     defaultColumns: ['term', 'updatedAt'],
   },
   access: {
-    read: () => true, // Publicly readable
+    // 1. PUBLIC READ ACCESS: This is the critical line.
+    read: () => true, 
+    
+    // 2. RESTRICTED WRITE ACCESS: Only logged-in users (Admins) can edit
     create: ({ req: { user } }) => !!user,
     update: ({ req: { user } }) => !!user,
     delete: ({ req: { user } }) => !!user,
@@ -17,7 +20,7 @@ export const GlossaryTerms: CollectionConfig = {
       name: 'term',
       type: 'text',
       required: true,
-      unique: true, // No duplicates allowed
+      unique: true, // Prevents duplicates
       index: true,
     },
     {
