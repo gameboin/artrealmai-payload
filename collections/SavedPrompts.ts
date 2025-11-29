@@ -3,30 +3,22 @@ import { CollectionConfig } from 'payload'
 export const SavedPrompts: CollectionConfig = {
   slug: 'saved-prompts',
   access: {
+    // Read: Users can only see their own prompts
     read: ({ req: { user } }) => {
       if (!user) return false;
       return { user: { equals: user.id } };
     },
 
-    // UPDATED DEBUGGING LOGIC
-    create: ({ req }) => {
-      const authHeader = req.headers.get('authorization');
-      const user = req.user;
-      
-      console.log('--- SAVE DEBUG ---');
-      console.log('1. Header received:', authHeader ? 'YES' : 'NO');
-      console.log('2. Header value:', authHeader); 
-      console.log('3. User found:', user ? user.email : 'NULL');
-      
-      // If user exists, allow. Otherwise, deny.
-      return !!user;
-    },
+    // Create: Any logged-in user
+    create: ({ req: { user } }) => !!user,
 
-    update: ({ req: { user }, id }) => {
+    // Update: Users can only update their own prompts
+    update: ({ req: { user } }) => {
       if (!user) return false;
       return { user: { equals: user.id } };
     },
 
+    // Delete: Users can only delete their own prompts
     delete: ({ req: { user } }) => {
       if (!user) return false;
       return { user: { equals: user.id } };
@@ -41,10 +33,14 @@ export const SavedPrompts: CollectionConfig = {
       relationTo: 'users', 
       required: true, 
       hasMany: false,
+      index: true, 
       hooks: {
         beforeChange: [
           ({ req, operation, value }) => {
-            if (operation === 'create' && req.user) return req.user.id;
+            // Force the logged-in user to be the owner
+            if (operation === 'create' && req.user) {
+              return req.user.id;
+            }
             return value;
           },
         ],
