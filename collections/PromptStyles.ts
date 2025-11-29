@@ -71,14 +71,30 @@ export const PromptStyles: CollectionConfig = {
   hooks: {
     beforeChange: [
       async ({ data, operation }: { data: any, operation: string }) => {
+        // Only run if we are pasting into bulkTerms
         if ((operation === 'create' || operation === 'update') && data.bulkTerms?.trim()) {
-          const newTerms = data.bulkTerms
+          
+          // 1. Process the NEW terms from the textbox
+          const newTermsInput = data.bulkTerms
             .split(',')
             .map((t: string) => t.trim())
-            .filter((t: string) => t)
+            .filter((t: string) => t);
+
+          // 2. Get existing terms (if any)
+          const currentTerms = data.terms || [];
+          
+          // 3. Create a Set of existing terms (lowercase) for easy checking
+          const existingSet = new Set(currentTerms.map((row: any) => row.text.toLowerCase()));
+
+          // 4. Filter out duplicates
+          const uniqueNewTerms = newTermsInput
+            .filter((text: string) => !existingSet.has(text.toLowerCase()))
             .map((text: string) => ({ text }));
 
-          data.terms = [...(data.terms || []), ...newTerms];
+          // 5. Merge
+          data.terms = [...currentTerms, ...uniqueNewTerms];
+          
+          // 6. Cleanup
           delete data.bulkTerms;
         }
         return data;
