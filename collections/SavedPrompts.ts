@@ -8,26 +8,23 @@ export const SavedPrompts: CollectionConfig = {
       return { user: { equals: user.id } };
     },
 
-    create: ({ req: { user } }) => {
-      // DEBUG LOG
-      if (!user) console.log('⛔ Create Blocked: No User found in request.');
+    // UPDATED DEBUGGING LOGIC
+    create: ({ req }) => {
+      const authHeader = req.headers.get('authorization');
+      const user = req.user;
+      
+      console.log('--- SAVE DEBUG ---');
+      console.log('1. Header received:', authHeader ? 'YES' : 'NO');
+      console.log('2. Header value:', authHeader); 
+      console.log('3. User found:', user ? user.email : 'NULL');
+      
+      // If user exists, allow. Otherwise, deny.
       return !!user;
     },
 
     update: ({ req: { user }, id }) => {
-      if (!user) {
-        console.log('⛔ Update Blocked: No User found.');
-        return false;
-      }
-      // Log who is trying to update what
-      console.log(`👤 User ${user.email} (ID: ${user.id}) trying to update Prompt ID: ${id}`);
-      
-      // Allow update ONLY if the doc belongs to user
-      return {
-        user: {
-          equals: user.id,
-        },
-      }
+      if (!user) return false;
+      return { user: { equals: user.id } };
     },
 
     delete: ({ req: { user } }) => {
@@ -44,14 +41,10 @@ export const SavedPrompts: CollectionConfig = {
       relationTo: 'users', 
       required: true, 
       hasMany: false,
-      index: true, // Speeds up the "My Prompts" query
       hooks: {
         beforeChange: [
           ({ req, operation, value }) => {
-            // Force the logged-in user to be the owner
-            if (operation === 'create' && req.user) {
-              return req.user.id;
-            }
+            if (operation === 'create' && req.user) return req.user.id;
             return value;
           },
         ],
