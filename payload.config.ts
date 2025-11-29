@@ -7,16 +7,10 @@ import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 import { s3Storage } from '@payloadcms/storage-s3'
 
-// Collection Imports (from ./collections)
-import { Users } from './collections/Users'
-import { Media } from './collections/Media'
-import { Articles } from './collections/Articles'
-import { Tags } from './collections/Tags'
-import { Authors } from './collections/Authors'
-import { GlossaryTerms } from './collections/GlossaryTerms'
-import { PromptStyles } from './collections/PromptStyles' // <--- Imported from new file
+// 1. Single Import for ALL Collections
+import { collections } from './collections' 
 
-// Global Imports (assuming you have a globals folder, if not create one at root)
+// Global Imports
 import { GlossaryImporter } from './globals/GlossaryImporter'
 
 const filename = fileURLToPath(import.meta.url)
@@ -24,35 +18,12 @@ const dirname = path.dirname(filename)
 
 export default buildConfig({
   admin: {
-    user: Users.slug,
+    user: 'users', // Note: Using string slug 'users' is safer here than Users.slug if Users isn't imported directly
     importMap: { baseDir: path.resolve(dirname) },
   },
 
-  collections: [
-    Users,
-    Media,
-    Articles,
-    Tags,
-    Authors,
-    GlossaryTerms,
-    PromptStyles, // <--- Clean and simple!
-
-    // SAVED PROMPTS (Inline for now)
-    {
-      slug: 'saved-prompts',
-      access: {
-        read: ({ req: { user } }) => !!user,
-        create: ({ req: { user } }) => !!user,
-        update: ({ req: { user }, data }) => user?.id === data?.user,
-        delete: ({ req: { user }, data }) => user?.id === data?.user,
-      },
-      fields: [
-        { name: 'title', type: 'text', required: true },
-        { name: 'prompt', type: 'textarea', required: true },
-        { name: 'user', type: 'relationship', relationTo: 'users', required: true, hasMany: false },
-      ],
-    },
-  ],
+  // 2. Use the imported array
+  collections: collections, 
 
   globals: [
     GlossaryImporter,
