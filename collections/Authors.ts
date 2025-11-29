@@ -1,4 +1,3 @@
-// collections/Authors.ts
 import { CollectionConfig } from 'payload'
 
 export const Authors: CollectionConfig = {
@@ -9,9 +8,10 @@ export const Authors: CollectionConfig = {
   },
   access: {
     read: () => true,
-    create: ({ req }) => (req.user as any)?.role === 'admin',
-    update: ({ req }) => (req.user as any)?.role === 'admin',
-    delete: ({ req }) => (req.user as any)?.role === 'admin',
+    // FIX: Check if the 'roles' array includes 'admin'
+    create: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
+    update: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
+    delete: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
   },
   fields: [
     {
