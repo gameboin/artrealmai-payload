@@ -1,4 +1,4 @@
-// payload.config.ts – FINAL & PERFECT (Fixed)
+// payload.config.ts
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
@@ -7,11 +7,17 @@ import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 import { s3Storage } from '@payloadcms/storage-s3'
 
+// Collection Imports (from ./collections)
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { Articles } from './collections/Articles'
 import { Tags } from './collections/Tags'
 import { Authors } from './collections/Authors'
+import { GlossaryTerms } from './collections/GlossaryTerms'
+import { PromptStyles } from './collections/PromptStyles' // <--- Imported from new file
+
+// Global Imports (assuming you have a globals folder, if not create one at root)
+import { GlossaryImporter } from './globals/GlossaryImporter'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -28,97 +34,10 @@ export default buildConfig({
     Articles,
     Tags,
     Authors,
+    GlossaryTerms,
+    PromptStyles, // <--- Clean and simple!
 
-    // PROMPT STYLES — ADMIN CAN CREATE/EDIT + BULK IMPORT WORKS
-    {
-      slug: 'prompt-styles',
-      access: {
-        read: () => true,
-        create: ({ req: { user } }) => !!user,   
-        update: ({ req: { user } }) => !!user,   
-        delete: ({ req: { user } }) => !!user,
-      },
-      admin: {
-        useAsTitle: 'category',
-        defaultColumns: ['category', 'updatedAt'],
-        description: 'Manage prompt style categories. Paste multiple terms at once!',
-      },
-      fields: [
-        {
-          name: 'category',
-          type: 'select',
-          required: true,
-          options: [
-            { label: 'Image Styles', value: 'image-styles' },
-            { label: 'Subject', value: 'subject' },
-            { label: 'Lighting', value: 'lighting' },
-            { label: 'Camera', value: 'camera' },
-            { label: 'Composition', value: 'composition' },
-            { label: 'Poses', value: 'poses' },
-            { label: 'Expressions', value: 'expressions' },
-            { label: 'Hairstyles', value: 'hairstyles' },
-            { label: 'Tops', value: 'tops' },
-            { label: 'Necklines', value: 'necklines' },
-            { label: 'Bottoms', value: 'bottoms' },
-            { label: 'Bodysuits', value: 'bodysuits' },
-            { label: 'Clothing Textures', value: 'clothing-textures' },
-            { label: 'Metal Textures', value: 'metal-textures' },
-            { label: 'Footwear', value: 'footwear' },
-            { label: 'Accessories', value: 'accessories' },
-            { label: 'Makeup', value: 'makeup' },
-            { label: 'Skin Details', value: 'skin-details' },
-            { label: 'Backgrounds', value: 'backgrounds' },
-            { label: 'Mood & Atmosphere', value: 'mood-atmosphere' },
-            { label: 'Art Movements', value: 'art-movements' },
-          ],
-        },
-        {
-          name: 'bulkTerms',
-          type: 'textarea',
-          label: 'Bulk Add Terms (comma-separated)',
-          admin: {
-            description: 'Paste multiple terms: elegant pose, sultry expression, lace bodysuit...',
-            placeholder: 'elegant, dramatic, playful, seductive...',
-          },
-        },
-        {
-          name: 'terms',
-          type: 'array',
-          label: 'Individual Terms',
-          required: true,
-          minRows: 1,
-          fields: [
-            {
-              name: 'text',
-              type: 'text',
-              required: true,
-              admin: { placeholder: 'e.g. cyberpunk' },
-            },
-          ],
-          admin: { initCollapsed: false },
-        },
-      ],
-      hooks: {
-        beforeChange: [
-          // Added ': any' to data to suppress TS errors about bulkTerms
-          async ({ data, operation }: { data: any, operation: string }) => {
-            if ((operation === 'create' || operation === 'update') && data.bulkTerms?.trim()) {
-              const newTerms = data.bulkTerms
-                .split(',')
-                .map((t: string) => t.trim())
-                .filter((t: string) => t)
-                .map((text: string) => ({ text }));
-
-              data.terms = [...(data.terms || []), ...newTerms];
-              delete data.bulkTerms;
-            }
-            return data;
-          },
-        ],
-      },
-    },
-
-    // SAVED PROMPTS
+    // SAVED PROMPTS (Inline for now)
     {
       slug: 'saved-prompts',
       access: {
@@ -135,18 +54,21 @@ export default buildConfig({
     },
   ],
 
+  globals: [
+    GlossaryImporter,
+  ],
+
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'fallback-secret',
   typescript: { outputFile: path.resolve(dirname, 'payload-types.ts') },
   db: mongooseAdapter({ url: process.env.DATABASE_URI || '' }),
   sharp,
 
-  // UPDATED CORS/CSRF:
   cors: [
     'https://artrealmai.com',
     'https://www.artrealmai.com',
     'http://localhost:3000',
-    'http://localhost:5500', // Common Live Server port
+    'http://localhost:5500', 
     'http://127.0.0.1:5500', 
   ],
   csrf: [
@@ -155,7 +77,7 @@ export default buildConfig({
     'http://localhost:3000',
     'http://localhost:5500',
     'http://127.0.0.1:5500',
-    'https://artrealmai-payload.onrender.com', // Trust self
+    'https://artrealmai-payload.onrender.com',
   ],
 
   plugins: [
