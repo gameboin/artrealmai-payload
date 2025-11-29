@@ -3,35 +3,36 @@ import { CollectionConfig } from 'payload'
 export const SavedPrompts: CollectionConfig = {
   slug: 'saved-prompts',
   access: {
-    // Anyone logged in can read their own prompts
     read: ({ req: { user } }) => {
       if (!user) return false;
+      return { user: { equals: user.id } };
+    },
+
+    create: ({ req: { user } }) => {
+      // DEBUG LOG
+      if (!user) console.log('⛔ Create Blocked: No User found in request.');
+      return !!user;
+    },
+
+    update: ({ req: { user }, id }) => {
+      if (!user) {
+        console.log('⛔ Update Blocked: No User found.');
+        return false;
+      }
+      // Log who is trying to update what
+      console.log(`👤 User ${user.email} (ID: ${user.id}) trying to update Prompt ID: ${id}`);
+      
+      // Allow update ONLY if the doc belongs to user
       return {
         user: {
           equals: user.id,
         },
       }
     },
-    // Anyone logged in can create
-    create: ({ req: { user } }) => !!user,
-    
-    // FIX: Use query to check existing document ownership
-    update: ({ req: { user } }) => {
-      if (!user) return false;
-      return {
-        user: {
-          equals: user.id,
-        },
-      }
-    },
-    // FIX: Use query to check existing document ownership
+
     delete: ({ req: { user } }) => {
       if (!user) return false;
-      return {
-        user: {
-          equals: user.id,
-        },
-      }
+      return { user: { equals: user.id } };
     },
   },
   fields: [
@@ -43,14 +44,15 @@ export const SavedPrompts: CollectionConfig = {
       relationTo: 'users', 
       required: true, 
       hasMany: false,
-      // Auto-populate user on create
+      index: true, // Speeds up the "My Prompts" query
       hooks: {
         beforeChange: [
           ({ req, operation, value }) => {
+            // Force the logged-in user to be the owner
             if (operation === 'create' && req.user) {
-              return req.user.id
+              return req.user.id;
             }
-            return value
+            return value;
           },
         ],
       },
