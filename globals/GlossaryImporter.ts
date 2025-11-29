@@ -61,9 +61,12 @@ export const GlossaryImporter: GlobalConfig = {
                     }
                   }
                 },
-                overrideAccess: true // <--- CRITICAL FIX FOR IMPORTS
+                overrideAccess: true 
               });
-            } catch (error) {
+            } catch (err) {
+              // FIX: Cast 'err' to 'any' so we can access .message safely
+              const error = err as any;
+              
               // Ignore duplicates, but log distinct errors
               if (!error.message?.includes('unique')) {
                  console.error(`Failed to import "${term}":`, error.message);
