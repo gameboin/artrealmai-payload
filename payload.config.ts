@@ -3,7 +3,6 @@ import {
   lexicalEditor,
   FixedToolbarFeature,
   InlineToolbarFeature,
-  BlocksFeature, // We use this to add our custom block
 } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
@@ -13,7 +12,6 @@ import { s3Storage } from '@payloadcms/storage-s3'
 
 import { collections } from './collections' 
 import { GlossaryImporter } from './globals/GlossaryImporter'
-import { Code } from './blocks/Code' // <--- IMPORT THE NEW BLOCK
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -32,14 +30,12 @@ export default buildConfig({
 
   editor: lexicalEditor({
     features: ({ defaultFeatures }) => [
+      // 1. Load Defaults (Includes the Native Code Block!)
       ...defaultFeatures,
+      
+      // 2. Enable Toolbars
       FixedToolbarFeature(),
       InlineToolbarFeature(),
-      
-      // REGISTER THE CUSTOM CODE BLOCK
-      BlocksFeature({
-        blocks: [Code],
-      }),
     ],
   }),
 
