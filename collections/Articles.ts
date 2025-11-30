@@ -1,5 +1,6 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
+import { Code } from '../blocks/Code' // Import the block definition
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -14,12 +15,7 @@ export const Articles: CollectionConfig = {
     delete: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
   },
   fields: [
-    {
-      name: 'title',
-      type: 'text',
-      required: true,
-    },
-    // --- IMPORT FIELD ---
+    { name: 'title', type: 'text', required: true },
     {
       name: 'markdownImport',
       type: 'textarea',
@@ -40,52 +36,18 @@ export const Articles: CollectionConfig = {
         description: 'WARNING: This overwrites existing content!',
       },
     },
-    // ------------------------------
-    {
-      name: 'slug',
-      type: 'text',
-      unique: true,
-      required: true,
-      index: true,
-      admin: { position: 'sidebar' },
-    },
-    {
-      name: 'excerpt',
-      type: 'textarea',
-      admin: { description: 'Short teaser for homepage' },
-    },
-    {
-      name: 'content',
-      type: 'richText',
-      required: true,
-    },
-    {
-      name: 'featuredImage',
-      type: 'upload',
-      relationTo: 'media',
-      required: true,
-    },
-    {
-      name: 'author',
-      type: 'relationship',
-      relationTo: 'authors',
-      admin: { position: 'sidebar' },
-    },
-    {
-      name: 'tags',
-      type: 'relationship',
-      relationTo: 'tags',
-      hasMany: true,
-      admin: { position: 'sidebar' },
-    },
+    { name: 'slug', type: 'text', unique: true, required: true, index: true, admin: { position: 'sidebar' } },
+    { name: 'excerpt', type: 'textarea', admin: { description: 'Short teaser for homepage' } },
+    { name: 'content', type: 'richText', required: true },
+    { name: 'featuredImage', type: 'upload', relationTo: 'media', required: true },
+    { name: 'author', type: 'relationship', relationTo: 'authors', admin: { position: 'sidebar' } },
+    { name: 'tags', type: 'relationship', relationTo: 'tags', hasMany: true, admin: { position: 'sidebar' } },
     {
       name: 'publishedDate',
       type: 'date',
       required: true,
       defaultValue: () => new Date(),
-      admin: { position: 'sidebar',
-        date: { pickerAppearance: 'dayAndTime' },
-      },
+      admin: { position: 'sidebar', date: { pickerAppearance: 'dayAndTime' } },
     },
   ],
   hooks: {
@@ -95,53 +57,81 @@ export const Articles: CollectionConfig = {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
 
           try {
-            // 1. SMART UNWRAPPER
+            // 1. Unwrap Markdown
             let cleanMarkdown = data.markdownImport.trim();
             if (cleanMarkdown.startsWith('```') && cleanMarkdown.endsWith('```')) {
                 const lines = cleanMarkdown.split('\n');
                 if (lines.length >= 2) {
                     cleanMarkdown = lines.slice(1, -1).join('\n').trim();
-                    console.log('🧹 Unwrap successful');
                 }
             }
 
-            // 2. MARKDOWN -> HTML
+            // 2. Convert to HTML
             const rawHtml = await marked(cleanMarkdown);
 
-            // 3. LOAD TOOLS
+            // 3. Import Tools
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
-                defaultEditorFeatures, // <--- Using defaults here too
+                defaultEditorFeatures,
+                BlocksFeature, // Need this to register our custom block in the converter
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
 
-            // 4. CONFIG
-            // We use defaultEditorFeatures because it includes Code Blocks
+            // 4. Config with Custom Block
             const rawConfig = {
               features: [
-                ...defaultEditorFeatures 
+                ...defaultEditorFeatures,
+                BlocksFeature({ blocks: [Code] }),
               ]
             };
 
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. CONVERT
+            // 5. CUSTOM CONVERTER: <pre> -> Code Block
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
+              converters: [
+                ({ node, converters, parent }) => {
+                  if (node.nodeName === 'PRE') {
+                    const codeElement = node.querySelector('code');
+                    const codeText = codeElement ? codeElement.textContent : node.textContent;
+                    
+                    // Simple language detection from class (e.g. "language-bash")
+                    let language = 'plaintext';
+                    if (codeElement && codeElement.className) {
+                        const match = codeElement.className.match(/language-(\w+)/);
+                        if (match) language = match[1];
+                    }
+
+                    // Return the Lexical Block Node
+                    return {
+                      type: 'block', // This tells Lexical it's a Block
+                      fields: {
+                        blockType: 'code', // Matches our Code.ts slug
+                        code: codeText || '',
+                        language: language,
+                      },
+                      format: '',
+                      version: 2, // Block version
+                    };
+                  }
+                  return null; // Fallback to default
+                },
+              ]
             });
 
-            // 6. SAVE
+            // 6. Save
             if (lexicalData && lexicalData.root) {
               data.content = lexicalData;
               data.markdownImport = null;
               data.doImport = false;
               console.log('✅ Import Success.');
             } else {
-              console.error('❌ Conversion failed (Root empty)');
+              console.error('❌ Conversion failed');
             }
 
           } catch (error) {
