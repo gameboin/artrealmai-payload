@@ -14,7 +14,12 @@ export const Articles: CollectionConfig = {
     delete: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
   },
   fields: [
-    { name: 'title', type: 'text', required: true },
+    {
+      name: 'title',
+      type: 'text',
+      required: true,
+    },
+    // --- IMPORT FIELD ---
     {
       name: 'markdownImport',
       type: 'textarea',
@@ -35,18 +40,52 @@ export const Articles: CollectionConfig = {
         description: 'WARNING: This overwrites existing content!',
       },
     },
-    { name: 'slug', type: 'text', unique: true, required: true, index: true, admin: { position: 'sidebar' } },
-    { name: 'excerpt', type: 'textarea', admin: { description: 'Short teaser for homepage' } },
-    { name: 'content', type: 'richText', required: true },
-    { name: 'featuredImage', type: 'upload', relationTo: 'media', required: true },
-    { name: 'author', type: 'relationship', relationTo: 'authors', admin: { position: 'sidebar' } },
-    { name: 'tags', type: 'relationship', relationTo: 'tags', hasMany: true, admin: { position: 'sidebar' } },
+    // ------------------------------
+    {
+      name: 'slug',
+      type: 'text',
+      unique: true,
+      required: true,
+      index: true,
+      admin: { position: 'sidebar' },
+    },
+    {
+      name: 'excerpt',
+      type: 'textarea',
+      admin: { description: 'Short teaser for homepage' },
+    },
+    {
+      name: 'content',
+      type: 'richText',
+      required: true,
+    },
+    {
+      name: 'featuredImage',
+      type: 'upload',
+      relationTo: 'media',
+      required: true,
+    },
+    {
+      name: 'author',
+      type: 'relationship',
+      relationTo: 'authors',
+      admin: { position: 'sidebar' },
+    },
+    {
+      name: 'tags',
+      type: 'relationship',
+      relationTo: 'tags',
+      hasMany: true,
+      admin: { position: 'sidebar' },
+    },
     {
       name: 'publishedDate',
       type: 'date',
       required: true,
       defaultValue: () => new Date(),
-      admin: { position: 'sidebar', date: { pickerAppearance: 'dayAndTime' } },
+      admin: { position: 'sidebar',
+        date: { pickerAppearance: 'dayAndTime' },
+      },
     },
   ],
   hooks: {
@@ -56,54 +95,46 @@ export const Articles: CollectionConfig = {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
 
           try {
-            // 1. Unwrap Markdown
+            // 1. SMART UNWRAPPER
             let cleanMarkdown = data.markdownImport.trim();
             if (cleanMarkdown.startsWith('```') && cleanMarkdown.endsWith('```')) {
                 const lines = cleanMarkdown.split('\n');
                 if (lines.length >= 2) {
                     cleanMarkdown = lines.slice(1, -1).join('\n').trim();
+                    console.log('🧹 Unwrap successful');
                 }
             }
 
-            // 2. Convert to HTML
+            // 2. MARKDOWN -> HTML
             const rawHtml = await marked(cleanMarkdown);
 
-            // 3. Import Tools (Dynamically to avoid build errors)
-            const lexicalModule = await import('@payloadcms/richtext-lexical');
+            // 3. LOAD TOOLS
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
-                defaultEditorFeatures
-            } = lexicalModule;
+                defaultEditorFeatures, // <--- Using defaults here too
+            } = await import('@payloadcms/richtext-lexical');
             
-            // Try to find CodeFeature in the module manually
-            // @ts-ignore
-            const CodeFeature = lexicalModule.CodeFeature || lexicalModule.CodeBlockFeature;
-
             const { JSDOM } = await import('jsdom');
 
-            // 4. Build Config
+            // 4. CONFIG
+            // We use defaultEditorFeatures because it includes Code Blocks
             const rawConfig = {
               features: [
-                ...defaultEditorFeatures,
+                ...defaultEditorFeatures 
               ]
             };
-            
-            // Explicitly push CodeFeature if we found it
-            if (CodeFeature) {
-                rawConfig.features.push(CodeFeature());
-            }
 
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. Convert
+            // 5. CONVERT
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
             });
 
-            // 6. Save
+            // 6. SAVE
             if (lexicalData && lexicalData.root) {
               data.content = lexicalData;
               data.markdownImport = null;

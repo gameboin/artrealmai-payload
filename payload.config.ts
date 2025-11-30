@@ -2,11 +2,10 @@
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { 
   lexicalEditor,
+  // We ONLY need the toolbars. 
+  // Code Blocks, Bold, Lists, etc. are all inside defaultFeatures.
   FixedToolbarFeature,
   InlineToolbarFeature,
-  // We try to import it. If TS complains, we ignore it below.
-  // @ts-ignore - Suppress "module has no exported member" error
-  CodeFeature, 
 } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
@@ -34,20 +33,14 @@ export default buildConfig({
 
   editor: lexicalEditor({
     features: ({ defaultFeatures }) => {
-      // 1. Prepare features list
-      const features = [
+      return [
+        // 1. Load Defaults (Includes Code Blocks!)
         ...defaultFeatures,
+        
+        // 2. Enable Toolbars
         FixedToolbarFeature(),
         InlineToolbarFeature(),
-      ];
-
-      // 2. Force-Add CodeFeature if it exists
-      // The @ts-ignore above allows us to use it here.
-      if (CodeFeature) {
-        features.push(CodeFeature());
-      }
-
-      return features;
+      ]
     },
   }),
 
@@ -57,19 +50,19 @@ export default buildConfig({
   sharp,
 
   cors: [
-    '[https://artrealmai.com](https://artrealmai.com)',
-    '[https://www.artrealmai.com](https://www.artrealmai.com)',
+    'https://artrealmai.com',
+    'https://www.artrealmai.com',
     'http://localhost:3000',
     'http://localhost:5500', 
-    '[http://127.0.0.1:5500](http://127.0.0.1:5500)', 
+    'http://127.0.0.1:5500', 
   ],
   csrf: [
-    '[https://artrealmai.com](https://artrealmai.com)',
-    '[https://www.artrealmai.com](https://www.artrealmai.com)',
+    'https://artrealmai.com',
+    'https://www.artrealmai.com',
     'http://localhost:3000',
     'http://localhost:5500',
-    '[http://127.0.0.1:5500](http://127.0.0.1:5500)',
-    '[https://artrealmai-payload.onrender.com](https://artrealmai-payload.onrender.com)',
+    'http://127.0.0.1:5500',
+    'https://artrealmai-payload.onrender.com',
   ],
 
   plugins: [
