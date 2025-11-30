@@ -2,34 +2,10 @@
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { 
   lexicalEditor,
-  // Toolbar Features (These make the buttons appear)
+  // We ONLY need these two to make the UI visible.
+  // Everything else (Bold, Code, Lists) is in defaultFeatures.
   FixedToolbarFeature,
   InlineToolbarFeature,
-  
-  // Standard Features
-  HeadingFeature,
-  BlockquoteFeature,
-  LinkFeature,
-  ParagraphFeature,
-  UploadFeature,
-  OrderedListFeature,
-  UnorderedListFeature,
-  ChecklistFeature,      
-  IndentFeature,
-  AlignFeature,
-  HorizontalRuleFeature,
-  
-  // Styling
-  BoldFeature,           
-  ItalicFeature,         
-  UnderlineFeature,      
-  StrikethroughFeature,  
-  SubscriptFeature,      
-  SuperscriptFeature,    
-  InlineCodeFeature,
-  
-  // The 'Missing' Feature (Try this one)
-  BlocksFeature,
 } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
@@ -56,51 +32,14 @@ export default buildConfig({
   ],
 
   editor: lexicalEditor({
-    features: ({ defaultFeatures }) => {
-      // DEBUG: This will show in your Render logs if this code runs
-      console.log('--- INITIALIZING EDITOR FEATURES ---');
+    features: ({ defaultFeatures }) => [
+      // 1. Load the defaults (This includes Code Blocks, Bold, Italic, Headings, etc.)
+      ...defaultFeatures,
       
-      return [
-        ...defaultFeatures,
-        
-        // 1. TOOLBARS (Essential)
-        FixedToolbarFeature(),
-        InlineToolbarFeature(),
-
-        // 2. CONTENT BLOCKS
-        HeadingFeature({ enabledHeadingSizes: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] }),
-        BlockquoteFeature(),
-        LinkFeature({}),
-        ParagraphFeature(),
-        UploadFeature({
-          collections: {
-            media: {
-              fields: [{ name: 'caption', type: 'text', label: 'Caption' }],
-            },
-          },
-        }),
-        OrderedListFeature(),
-        UnorderedListFeature(),
-        ChecklistFeature(),
-        IndentFeature(),
-        AlignFeature(),
-        HorizontalRuleFeature(),
-        
-        // 3. TEXT STYLING
-        BoldFeature(),
-        ItalicFeature(),
-        UnderlineFeature(),
-        StrikethroughFeature(),
-        SubscriptFeature(), 
-        SuperscriptFeature(), 
-        InlineCodeFeature(),
-        
-        // 4. TRYING BLOCKS FEATURE (For Code Blocks)
-        BlocksFeature({
-           blocks: [], // Use default blocks if any
-        }),
-      ]
-    },
+      // 2. Add the Toolbars so you can actually click buttons
+      FixedToolbarFeature(),
+      InlineToolbarFeature(),
+    ],
   }),
 
   secret: process.env.PAYLOAD_SECRET || 'fallback-secret',
