@@ -1,6 +1,22 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
 
+// 1. Import features explicitly for the converter to use
+import {
+  HeadingFeature,
+  ParagraphFeature,
+  BoldFeature,
+  ItalicFeature,
+  UnderlineFeature,
+  StrikethroughFeature,
+  LinkFeature,
+  BlockquoteFeature,
+  OrderedListFeature,
+  UnorderedListFeature,
+  InlineCodeFeature,
+  HorizontalRuleFeature,
+} from '@payloadcms/richtext-lexical'
+
 export const Articles: CollectionConfig = {
   slug: 'articles',
   admin: {
@@ -20,20 +36,18 @@ export const Articles: CollectionConfig = {
       required: true,
     },
     // --- IMPORT FIELD ---
-    // (Removed the buggy 'ui' field here to fix the build error)
     {
       name: 'markdownImport',
       type: 'textarea',
-      // The label acts as the header now
-      label: '⚡ Markdown Importer', 
+      label: '⚡ Markdown Importer',
       admin: {
-        description: 'Paste raw markdown here from your AI. Check the box below to run.',
+        description: 'Paste raw markdown here. Check the box below to run.',
         position: 'sidebar',
         rows: 8,
       },
     },
     {
-      name: 'doImport', 
+      name: 'doImport',
       type: 'checkbox',
       label: 'Run Convert on Save',
       defaultValue: false,
@@ -93,37 +107,58 @@ export const Articles: CollectionConfig = {
   ],
   hooks: {
     beforeChange: [
-      async ({ data, req }) => {
+      async ({ data }) => {
         // ONLY run if text exists AND the checkbox is ticked
         if (data.markdownImport && data.doImport) {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
-          
+
           try {
             // 1. Markdown -> HTML
             const rawHtml = await marked(data.markdownImport);
 
-            // 2. Load Tools
+            // 2. Load Server Tools
             const { convertHTMLToLexical } = await import('@payloadcms/richtext-lexical');
             const { JSDOM } = await import('jsdom');
-            
-            // 3. HTML -> Lexical
+
+            // 3. DEFINE A CLEAN CONFIG FOR CONVERSION
+            // This prevents the "undefined map" error by guaranteeing features exist.
+            const conversionConfig = {
+              features: [
+                ParagraphFeature(),
+                HeadingFeature({ enabledHeadingSizes: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] }),
+                BoldFeature(),
+                ItalicFeature(),
+                UnderlineFeature(),
+                StrikethroughFeature(),
+                LinkFeature({}),
+                BlockquoteFeature(),
+                OrderedListFeature(),
+                UnorderedListFeature(),
+                InlineCodeFeature(),
+                HorizontalRuleFeature(),
+              ]
+            };
+
+            // 4. HTML -> Lexical JSON
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
-              editorConfig: req.payload.config.editor as any,
+              editorConfig: conversionConfig as any, // Pass our clean config
               JSDOM: JSDOM,
             });
 
-            // 4. Overwrite Content
+            // 5. Overwrite Content
             if (lexicalData && lexicalData.root) {
-                data.content = lexicalData;
-                
-                // 5. CLEANUP: Clear text and uncheck the box
-                data.markdownImport = null;
-                data.doImport = false; 
-                
-                console.log('✅ Import Success.');
+              data.content = lexicalData;
+
+              // 6. CLEANUP
+              data.markdownImport = null;
+              data.doImport = false;
+
+              console.log('✅ Import Success.');
+            } else {
+              console.error('❌ Lexical Conversion failed (Root was empty)');
             }
-            
+
           } catch (error) {
             console.error('❌ IMPORT ERROR:', error);
           }
