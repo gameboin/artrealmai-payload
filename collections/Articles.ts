@@ -19,30 +19,27 @@ export const Articles: CollectionConfig = {
       type: 'text',
       required: true,
     },
-    // --- IMPORT SECTION (Sidebar) ---
-    {
-      type: 'ui', // Visual divider
-      admin: { position: 'sidebar', components: { Field: () => null } },
-      label: 'Markdown Importer',
-    },
+    // --- IMPORT FIELD ---
+    // (Removed the buggy 'ui' field here to fix the build error)
     {
       name: 'markdownImport',
       type: 'textarea',
-      label: '1. Paste Markdown Here',
+      // The label acts as the header now
+      label: '⚡ Markdown Importer', 
       admin: {
-        description: 'Paste raw text from your AI.',
+        description: 'Paste raw markdown here from your AI. Check the box below to run.',
         position: 'sidebar',
         rows: 8,
       },
     },
     {
-      name: 'doImport', // The Safety Switch
+      name: 'doImport', 
       type: 'checkbox',
-      label: '2. Convert on Save?',
+      label: 'Run Convert on Save',
       defaultValue: false,
       admin: {
         position: 'sidebar',
-        description: 'Check this box, then click Save to overwrite the main content.',
+        description: 'WARNING: This overwrites existing content!',
       },
     },
     // ------------------------------
