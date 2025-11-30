@@ -96,53 +96,54 @@ export const Articles: CollectionConfig = {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
 
           try {
-            // --- 1. SMART UNWRAPPER LOGIC ---
+            // 1. SMART UNWRAPPER
             let cleanMarkdown = data.markdownImport.trim();
-            
-            // If the whole text starts with ``` and ends with ```, strip them
             if (cleanMarkdown.startsWith('```') && cleanMarkdown.endsWith('```')) {
                 const lines = cleanMarkdown.split('\n');
-                // Remove the first line (```markdown) and the last line (```)
                 if (lines.length >= 2) {
                     cleanMarkdown = lines.slice(1, -1).join('\n').trim();
-                    console.log('🧹 Detected wrapped markdown. Auto-unwrapping...');
+                    console.log('🧹 Unwrap successful');
                 }
             }
 
-            // 2. Markdown -> HTML
+            // 2. MARKDOWN -> HTML
             const rawHtml = await marked(cleanMarkdown);
 
-            // 3. Load Tools
+            // 3. LOAD TOOLS
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
-                defaultEditorFeatures // Use defaults to ensure Code Blocks exist
+                defaultEditorFeatures, // <--- THIS IS THE KEY FIX
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
 
-            // 4. Config
+            // 4. CONFIG
+            // We use defaultEditorFeatures because it GUARANTEES that
+            // Code Blocks, Headings, and Lists are enabled.
             const rawConfig = {
-              features: [...defaultEditorFeatures]
+              features: [
+                ...defaultEditorFeatures 
+              ]
             };
 
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. Convert
+            // 5. CONVERT
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
             });
 
-            // 6. Save
+            // 6. SAVE
             if (lexicalData && lexicalData.root) {
               data.content = lexicalData;
               data.markdownImport = null;
               data.doImport = false;
               console.log('✅ Import Success.');
             } else {
-              console.error('❌ Lexical Conversion failed (Root was empty)');
+              console.error('❌ Conversion failed (Root empty)');
             }
 
           } catch (error) {
