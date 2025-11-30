@@ -92,7 +92,6 @@ export const Articles: CollectionConfig = {
   hooks: {
     beforeChange: [
       async ({ data, req }) => {
-        // ONLY run if text exists AND the checkbox is ticked
         if (data.markdownImport && data.doImport) {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
 
@@ -100,11 +99,11 @@ export const Articles: CollectionConfig = {
             // 1. Markdown -> HTML
             const rawHtml = await marked(data.markdownImport);
 
-            // 2. Load Tools Dynamically
+            // 2. Load Tools
             const { 
                 convertHTMLToLexical, 
-                sanitizeServerEditorConfig, // <--- NEW: The sanitization tool
-                // Features we need for the conversion
+                sanitizeServerEditorConfig,
+                // Features
                 ParagraphFeature,
                 HeadingFeature,
                 BoldFeature,
@@ -116,12 +115,13 @@ export const Articles: CollectionConfig = {
                 OrderedListFeature,
                 UnorderedListFeature,
                 InlineCodeFeature,
-                HorizontalRuleFeature
+                HorizontalRuleFeature,
+                BlocksFeature, // <--- 1. NEW IMPORT: The Code Block Feature
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
 
-            // 3. DEFINE RAW CONFIG
+            // 3. DEFINE CONFIG (Now with BlocksFeature!)
             const rawConfig = {
               features: [
                 ParagraphFeature(),
@@ -136,28 +136,25 @@ export const Articles: CollectionConfig = {
                 UnorderedListFeature(),
                 InlineCodeFeature(),
                 HorizontalRuleFeature(),
+                BlocksFeature(), // <--- 2. ADDED HERE: Enables Code Blocks in the conversion
               ]
             };
 
-            // 4. SANITIZE CONFIG (This fixes the "map of undefined" error)
-            // This turns the "Feature Functions" into the "Resolved Features" the converter needs.
+            // 4. SANITIZE CONFIG
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
             // 5. HTML -> Lexical JSON
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
-              editorConfig: sanitizedConfig, // Use the sanitized version
+              editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
             });
 
             // 6. Overwrite Content
             if (lexicalData && lexicalData.root) {
               data.content = lexicalData;
-
-              // 7. CLEANUP
               data.markdownImport = null;
               data.doImport = false;
-
               console.log('✅ Import Success.');
             } else {
               console.error('❌ Lexical Conversion failed (Root was empty)');
@@ -165,8 +162,6 @@ export const Articles: CollectionConfig = {
 
           } catch (error) {
             console.error('❌ IMPORT ERROR:', error);
-            // NOTE: If this fails, the "content: required" validation might still fail the save.
-            // This is expected behavior (you can't save an article without content).
           }
         }
         return data;
