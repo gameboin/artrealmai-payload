@@ -1,6 +1,6 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
-import { Code } from '../blocks/Code' // Import the block definition
+import { Code } from '../blocks/Code' // Ensure this path is correct based on your folder structure
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -74,7 +74,7 @@ export const Articles: CollectionConfig = {
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
                 defaultEditorFeatures,
-                BlocksFeature, // Need this to register our custom block in the converter
+                BlocksFeature,
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
@@ -89,40 +89,39 @@ export const Articles: CollectionConfig = {
 
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. CUSTOM CONVERTER: <pre> -> Code Block
+            // 5. CONVERT (With Explicit Types)
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
               converters: [
-                ({ node, converters, parent }) => {
+                // FIX: Explicitly type 'node' as any and remove unused args
+                ({ node }: { node: any }) => {
                   if (node.nodeName === 'PRE') {
                     const codeElement = node.querySelector('code');
                     const codeText = codeElement ? codeElement.textContent : node.textContent;
                     
-                    // Simple language detection from class (e.g. "language-bash")
                     let language = 'plaintext';
                     if (codeElement && codeElement.className) {
                         const match = codeElement.className.match(/language-(\w+)/);
                         if (match) language = match[1];
                     }
 
-                    // Return the Lexical Block Node
                     return {
-                      type: 'block', // This tells Lexical it's a Block
+                      type: 'block',
                       fields: {
-                        blockType: 'code', // Matches our Code.ts slug
+                        blockType: 'code',
                         code: codeText || '',
                         language: language,
                       },
                       format: '',
-                      version: 2, // Block version
+                      version: 2,
                     };
                   }
-                  return null; // Fallback to default
+                  return null;
                 },
               ]
-            });
+            } as any);
 
             // 6. Save
             if (lexicalData && lexicalData.root) {
