@@ -100,35 +100,61 @@ export const Articles: CollectionConfig = {
             // 1. Markdown -> HTML
             const rawHtml = await marked(data.markdownImport);
 
-            // 2. Load Tools
-            const { convertHTMLToLexical } = await import('@payloadcms/richtext-lexical');
+            // 2. Load Tools Dynamically
+            const { 
+                convertHTMLToLexical, 
+                sanitizeServerEditorConfig, // <--- NEW: The sanitization tool
+                // Features we need for the conversion
+                ParagraphFeature,
+                HeadingFeature,
+                BoldFeature,
+                ItalicFeature,
+                UnderlineFeature,
+                StrikethroughFeature,
+                LinkFeature,
+                BlockquoteFeature,
+                OrderedListFeature,
+                UnorderedListFeature,
+                InlineCodeFeature,
+                HorizontalRuleFeature
+            } = await import('@payloadcms/richtext-lexical');
+            
             const { JSDOM } = await import('jsdom');
 
-            // 3. THE FIX: Grab the EXISTING Sanitized Editor Config
-            // We find the 'content' field definition from the running payload instance.
-            // This config is already resolved, valid, and has all features loaded.
-            const articlesCollection = req.payload.collections['articles'];
-            const contentField = articlesCollection.config.fields.find((f: any) => f.name === 'content');
-            
-            // We cast to 'any' to access the internal 'editor' property safely
-            const sanitizedEditorConfig = (contentField as any)?.editor;
+            // 3. DEFINE RAW CONFIG
+            const rawConfig = {
+              features: [
+                ParagraphFeature(),
+                HeadingFeature({ enabledHeadingSizes: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] }),
+                BoldFeature(),
+                ItalicFeature(),
+                UnderlineFeature(),
+                StrikethroughFeature(),
+                LinkFeature({}),
+                BlockquoteFeature(),
+                OrderedListFeature(),
+                UnorderedListFeature(),
+                InlineCodeFeature(),
+                HorizontalRuleFeature(),
+              ]
+            };
 
-            if (!sanitizedEditorConfig) {
-                throw new Error('Could not find sanitized editor config on content field.');
-            }
+            // 4. SANITIZE CONFIG (This fixes the "map of undefined" error)
+            // This turns the "Feature Functions" into the "Resolved Features" the converter needs.
+            const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 4. Convert HTML -> Lexical JSON
+            // 5. HTML -> Lexical JSON
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
-              editorConfig: sanitizedEditorConfig, // Passing the real, working config
+              editorConfig: sanitizedConfig, // Use the sanitized version
               JSDOM: JSDOM,
             });
 
-            // 5. Overwrite Content
+            // 6. Overwrite Content
             if (lexicalData && lexicalData.root) {
               data.content = lexicalData;
 
-              // 6. CLEANUP
+              // 7. CLEANUP
               data.markdownImport = null;
               data.doImport = false;
 
@@ -139,8 +165,8 @@ export const Articles: CollectionConfig = {
 
           } catch (error) {
             console.error('❌ IMPORT ERROR:', error);
-            // We catch the error so the "Content Required" validation can fire normally
-            // if the import failed.
+            // NOTE: If this fails, the "content: required" validation might still fail the save.
+            // This is expected behavior (you can't save an article without content).
           }
         }
         return data;
