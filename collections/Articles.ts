@@ -116,12 +116,12 @@ export const Articles: CollectionConfig = {
                 UnorderedListFeature,
                 InlineCodeFeature,
                 HorizontalRuleFeature,
-                BlocksFeature, // <--- 1. NEW IMPORT: The Code Block Feature
+                BlocksFeature, 
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
 
-            // 3. DEFINE CONFIG (Now with BlocksFeature!)
+            // 3. DEFINE CONFIG
             const rawConfig = {
               features: [
                 ParagraphFeature(),
@@ -136,7 +136,8 @@ export const Articles: CollectionConfig = {
                 UnorderedListFeature(),
                 InlineCodeFeature(),
                 HorizontalRuleFeature(),
-                BlocksFeature(), // <--- 2. ADDED HERE: Enables Code Blocks in the conversion
+                // FIX IS HERE: Must provide an empty blocks array
+                BlocksFeature({ blocks: [] }), 
               ]
             };
 
