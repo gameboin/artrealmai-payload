@@ -103,41 +103,17 @@ export const Articles: CollectionConfig = {
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
-                // Features
-                ParagraphFeature,
-                HeadingFeature,
-                BoldFeature,
-                ItalicFeature,
-                UnderlineFeature,
-                StrikethroughFeature,
-                LinkFeature,
-                BlockquoteFeature,
-                OrderedListFeature,
-                UnorderedListFeature,
-                InlineCodeFeature,
-                HorizontalRuleFeature,
-                BlocksFeature, 
+                // THE FIX: Import the default set which includes Code Blocks
+                defaultEditorFeatures 
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
 
-            // 3. DEFINE CONFIG
+            // 3. DEFINE CONFIG (Using Defaults)
+            // defaultEditorFeatures includes Bold, Italic, Code Blocks, etc.
             const rawConfig = {
               features: [
-                ParagraphFeature(),
-                HeadingFeature({ enabledHeadingSizes: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] }),
-                BoldFeature(),
-                ItalicFeature(),
-                UnderlineFeature(),
-                StrikethroughFeature(),
-                LinkFeature({}),
-                BlockquoteFeature(),
-                OrderedListFeature(),
-                UnorderedListFeature(),
-                InlineCodeFeature(),
-                HorizontalRuleFeature(),
-                // FIX IS HERE: Must provide an empty blocks array
-                BlocksFeature({ blocks: [] }), 
+                ...defaultEditorFeatures
               ]
             };
 
@@ -151,7 +127,7 @@ export const Articles: CollectionConfig = {
               JSDOM: JSDOM,
             });
 
-            // 6. Overwrite Content
+            // 6. SAVE
             if (lexicalData && lexicalData.root) {
               data.content = lexicalData;
               data.markdownImport = null;
