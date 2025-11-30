@@ -25,7 +25,7 @@ export const Articles: CollectionConfig = {
       type: 'textarea',
       label: '⚡ Markdown Importer',
       admin: {
-        description: 'Paste raw markdown here. Check the box below to run.',
+        description: 'Paste raw markdown here. The system will auto-clean wrapping tags.',
         position: 'sidebar',
         rows: 8,
       },
@@ -96,38 +96,46 @@ export const Articles: CollectionConfig = {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
 
           try {
-            // 1. Markdown -> HTML
-            const rawHtml = await marked(data.markdownImport);
+            // --- 1. SMART UNWRAPPER LOGIC ---
+            let cleanMarkdown = data.markdownImport.trim();
+            
+            // If the whole text starts with ``` and ends with ```, strip them
+            if (cleanMarkdown.startsWith('```') && cleanMarkdown.endsWith('```')) {
+                const lines = cleanMarkdown.split('\n');
+                // Remove the first line (```markdown) and the last line (```)
+                if (lines.length >= 2) {
+                    cleanMarkdown = lines.slice(1, -1).join('\n').trim();
+                    console.log('🧹 Detected wrapped markdown. Auto-unwrapping...');
+                }
+            }
 
-            // 2. Load Tools
+            // 2. Markdown -> HTML
+            const rawHtml = await marked(cleanMarkdown);
+
+            // 3. Load Tools
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
-                // THE FIX: Import the default set which includes Code Blocks
-                defaultEditorFeatures 
+                defaultEditorFeatures // Use defaults to ensure Code Blocks exist
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
 
-            // 3. DEFINE CONFIG (Using Defaults)
-            // defaultEditorFeatures includes Bold, Italic, Code Blocks, etc.
+            // 4. Config
             const rawConfig = {
-              features: [
-                ...defaultEditorFeatures
-              ]
+              features: [...defaultEditorFeatures]
             };
 
-            // 4. SANITIZE CONFIG
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. HTML -> Lexical JSON
+            // 5. Convert
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
             });
 
-            // 6. SAVE
+            // 6. Save
             if (lexicalData && lexicalData.root) {
               data.content = lexicalData;
               data.markdownImport = null;
