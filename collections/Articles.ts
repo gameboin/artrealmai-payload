@@ -69,17 +69,41 @@ export const Articles: CollectionConfig = {
             const rawHtml = await marked(cleanMarkdown);
 
             // 3. Import Tools
+            const lexicalModule = await import('@payloadcms/richtext-lexical');
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
-                defaultEditorFeatures,
-            } = await import('@payloadcms/richtext-lexical');
+                // Explicitly import features to guarantee they exist
+                ParagraphFeature,
+                HeadingFeature,
+                BoldFeature,
+                ItalicFeature,
+                UnderlineFeature,
+                LinkFeature,
+                BlockquoteFeature,
+                OrderedListFeature,
+                UnorderedListFeature,
+                InlineCodeFeature,
+            } = lexicalModule;
             
             const { JSDOM } = await import('jsdom');
 
-            // 4. Config
+            // 4. Build Config (Explicit + Default fallback)
             const rawConfig = {
-              features: [...defaultEditorFeatures]
+              features: [
+                ParagraphFeature(),
+                HeadingFeature({ enabledHeadingSizes: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] }),
+                BoldFeature(),
+                ItalicFeature(),
+                UnderlineFeature(),
+                LinkFeature({}),
+                BlockquoteFeature(),
+                OrderedListFeature(),
+                UnorderedListFeature(),
+                InlineCodeFeature(),
+                // Add defaults to catch anything we missed (like Code Blocks)
+                ...lexicalModule.defaultEditorFeatures,
+              ]
             };
 
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
@@ -101,7 +125,6 @@ export const Articles: CollectionConfig = {
                         if (match) lang = match[1];
                     }
 
-                    // Return NATIVE 'code' node structure
                     return {
                       type: 'code', 
                       language: lang,
