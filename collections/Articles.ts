@@ -1,6 +1,5 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
-import { CodeBlock } from '../blocks/CodeBlock' 
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -9,14 +8,13 @@ export const Articles: CollectionConfig = {
     defaultColumns: ['title', 'author', 'publishedDate', 'status'],
   },
   access: {
-    read: () => true, // Public can read
-    // CHANGE: Allow ANY logged-in user to create/edit/delete
+    read: () => true,
+    // RELAXED ACCESS: If you are logged in, you can save.
     create: ({ req: { user } }) => !!user,
     update: ({ req: { user } }) => !!user,
     delete: ({ req: { user } }) => !!user,
   },
   fields: [
-    // ... (Keep all your existing fields exactly as they are) ...
     { name: 'title', type: 'text', required: true },
     {
       name: 'markdownImport',
@@ -59,7 +57,7 @@ export const Articles: CollectionConfig = {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
 
           try {
-            // 1. Unwrap Markdown
+            // 1. Unwrap
             let cleanMarkdown = data.markdownImport.trim();
             if (cleanMarkdown.startsWith('```') && cleanMarkdown.endsWith('```')) {
                 const lines = cleanMarkdown.split('\n');
@@ -68,56 +66,49 @@ export const Articles: CollectionConfig = {
                 }
             }
 
-            // 2. Convert to HTML
+            // 2. HTML
             const rawHtml = await marked(cleanMarkdown);
 
-            // 3. Import Tools
+            // 3. Tools
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
                 defaultEditorFeatures,
-                BlocksFeature,
             } = await import('@payloadcms/richtext-lexical');
-            
             const { JSDOM } = await import('jsdom');
 
-            // 4. Config with OUR Custom Block
-            const rawConfig = {
-              features: [
-                ...defaultEditorFeatures,
-                BlocksFeature({ blocks: [CodeBlock] }),
-              ]
-            };
-
+            // 4. Config
+            const rawConfig = { features: [...defaultEditorFeatures] };
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. CONVERT (The Mapping)
+            // 5. Convert (Mapping <pre> to 'code' block)
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
               converters: [
-                // MAP <pre> TO CUSTOM 'code-block'
                 ({ node }: { node: any }) => {
                   if (node.nodeName === 'PRE') {
                     const codeElement = node.querySelector('code');
                     const text = codeElement ? codeElement.textContent : node.textContent;
-                    
                     let lang = 'plaintext';
                     if (codeElement && codeElement.className) {
                         const match = codeElement.className.match(/language-(\w+)/);
                         if (match) lang = match[1];
                     }
-
                     return {
-                      type: 'block', // Lexical Block Node
-                      fields: {
-                        blockType: 'code-block', // Must match slug in CodeBlock.ts
-                        code: text || '',
-                        language: lang,
-                      },
+                      type: 'code', 
+                      language: lang,
+                      children: [{
+                        type: 'text',
+                        text: text || '',
+                        format: 0,
+                        detail: 0,
+                        mode: 'normal',
+                        style: '',
+                      }],
                       format: '',
-                      version: 2,
+                      version: 1,
                     };
                   }
                   return null;

@@ -4,7 +4,6 @@ import {
   lexicalEditor,
   FixedToolbarFeature,
   InlineToolbarFeature,
-  BlocksFeature, // Required for Custom Blocks
 } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
@@ -14,7 +13,6 @@ import { s3Storage } from '@payloadcms/storage-s3'
 
 import { collections } from './collections' 
 import { GlossaryImporter } from './globals/GlossaryImporter'
-import { CodeBlock } from './blocks/CodeBlock' // <--- Import the new block
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -33,14 +31,12 @@ export default buildConfig({
 
   editor: lexicalEditor({
     features: ({ defaultFeatures }) => [
+      // 1. Load Defaults (Includes Code Blocks!)
       ...defaultFeatures,
+      
+      // 2. Enable Toolbars
       FixedToolbarFeature(),
       InlineToolbarFeature(),
-      
-      // REGISTER THE CUSTOM BLOCK
-      BlocksFeature({
-        blocks: [CodeBlock],
-      }),
     ],
   }),
 
@@ -49,20 +45,21 @@ export default buildConfig({
   db: mongooseAdapter({ url: process.env.DATABASE_URI || '' }),
   sharp,
 
+  // FIX: Clean URLs (No markdown formatting!)
   cors: [
-    '[https://artrealmai.com](https://artrealmai.com)',
-    '[https://www.artrealmai.com](https://www.artrealmai.com)',
+    'https://artrealmai.com',
+    'https://www.artrealmai.com',
     'http://localhost:3000',
     'http://localhost:5500', 
-    '[http://127.0.0.1:5500](http://127.0.0.1:5500)', 
+    'http://127.0.0.1:5500', 
   ],
   csrf: [
-    '[https://artrealmai.com](https://artrealmai.com)',
-    '[https://www.artrealmai.com](https://www.artrealmai.com)',
+    'https://artrealmai.com',
+    'https://www.artrealmai.com',
     'http://localhost:3000',
     'http://localhost:5500',
-    '[http://127.0.0.1:5500](http://127.0.0.1:5500)',
-    '[https://artrealmai-payload.onrender.com](https://artrealmai-payload.onrender.com)',
+    'http://127.0.0.1:5500',
+    'https://artrealmai-payload.onrender.com',
   ],
 
   plugins: [
