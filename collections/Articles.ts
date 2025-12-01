@@ -68,21 +68,23 @@ export const Articles: CollectionConfig = {
 
             // 2. HTML
             const rawHtml = await marked(cleanMarkdown);
-            console.log('🔍 DEBUG HTML SNIPPET:', rawHtml.substring(0, 200)); // CHECK THIS LOG!
 
             // 3. Tools
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
                 defaultEditorFeatures,
-                BlocksFeature
+                BlocksFeature,
+                InlineCodeFeature, // <--- Added this
             } = await import('@payloadcms/richtext-lexical');
+            
             const { JSDOM } = await import('jsdom');
 
             // 4. Config
             const rawConfig = {
               features: [
                 ...defaultEditorFeatures,
+                InlineCodeFeature(), // <--- Added this
                 BlocksFeature({ blocks: [CodeBlock] }),
               ]
             };
@@ -96,12 +98,9 @@ export const Articles: CollectionConfig = {
               JSDOM: JSDOM,
               converters: [
                 ({ node }: { node: any }) => {
-                  // LOG EVERY NODE TO SEE WHAT WE ARE MISSING
-                  // console.log('Processing Node:', node.nodeName); 
-
-                  // Match PRE or DIV wrapping code
-                  if (node.nodeName === 'PRE') {
-                    console.log('⚡ FOUND PRE TAG! Converting...');
+                  // CASE INSENSITIVE CHECK FOR <PRE>
+                  if (node.nodeName && node.nodeName.toUpperCase() === 'PRE') {
+                    console.log('⚡ MATCHED <PRE> TAG');
                     
                     const codeElement = node.querySelector('code');
                     const text = codeElement ? codeElement.textContent : node.textContent;
