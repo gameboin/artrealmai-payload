@@ -1,6 +1,6 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
-import { CodeBlock } from '../blocks/CodeBlock' 
+import { CodeBlock } from '../blocks/CodeBlock'
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -57,7 +57,7 @@ export const Articles: CollectionConfig = {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
 
           try {
-            // 1. Unwrap Markdown
+            // 1. Unwrap
             let cleanMarkdown = data.markdownImport.trim();
             if (cleanMarkdown.startsWith('```') && cleanMarkdown.endsWith('```')) {
                 const lines = cleanMarkdown.split('\n');
@@ -66,24 +66,24 @@ export const Articles: CollectionConfig = {
                 }
             }
 
-            // 2. Convert to HTML
+            // 2. HTML
             const rawHtml = await marked(cleanMarkdown);
+            console.log('First 50 chars of HTML:', rawHtml.substring(0, 50));
 
-            // 3. Import Tools
+            // 3. Tools
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
                 defaultEditorFeatures,
-                BlocksFeature,
+                BlocksFeature
             } = await import('@payloadcms/richtext-lexical');
-            
             const { JSDOM } = await import('jsdom');
 
             // 4. Config
             const rawConfig = {
               features: [
                 ...defaultEditorFeatures,
-                BlocksFeature({ blocks: [CodeBlock] }), // Add our block
+                BlocksFeature({ blocks: [CodeBlock] }),
               ]
             };
 
@@ -95,9 +95,14 @@ export const Articles: CollectionConfig = {
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
               converters: [
-                // MAP <pre> to CUSTOM 'code-block'
                 ({ node }: { node: any }) => {
-                  if (node.nodeName === 'PRE') {
+                  // Log every node to check if PRE is being seen
+                  // console.log('Processing node:', node.nodeName);
+
+                  // Case-Insensitive Check for PRE tag
+                  if (node.nodeName && node.nodeName.toUpperCase() === 'PRE') {
+                    console.log('⚡ FOUND PRE TAG! Converting to Custom Block...');
+                    
                     const codeElement = node.querySelector('code');
                     const text = codeElement ? codeElement.textContent : node.textContent;
                     
@@ -108,9 +113,9 @@ export const Articles: CollectionConfig = {
                     }
 
                     return {
-                      type: 'block', // It's a Block
+                      type: 'block', 
                       fields: {
-                        blockType: 'code-block', // Matches slug
+                        blockType: 'code-block',
                         code: text || '',
                         language: lang,
                       },
