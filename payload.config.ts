@@ -1,11 +1,9 @@
-// payload.config.ts
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { 
   lexicalEditor,
   FixedToolbarFeature,
   InlineToolbarFeature,
-  BlocksFeature,
-  InlineCodeFeature, // <--- Explicitly Import this
+  BlocksFeature, 
 } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
@@ -15,7 +13,7 @@ import { s3Storage } from '@payloadcms/storage-s3'
 
 import { collections } from './collections' 
 import { GlossaryImporter } from './globals/GlossaryImporter'
-import { CodeBlock } from './blocks/CodeBlock' // <--- Ensure this exists!
+import { CodeBlock } from './blocks/CodeBlock' 
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -37,9 +35,8 @@ export default buildConfig({
       ...defaultFeatures,
       FixedToolbarFeature(),
       InlineToolbarFeature(),
-      InlineCodeFeature(), // <--- Force Enable Inline Code
       
-      // Register our Custom Block for the big code boxes
+      // REGISTER CUSTOM BLOCK
       BlocksFeature({
         blocks: [CodeBlock],
       }),

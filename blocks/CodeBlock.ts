@@ -1,7 +1,7 @@
 import { Block } from 'payload'
 
 export const CodeBlock: Block = {
-  slug: 'code-block', // <--- Important ID
+  slug: 'code-block', // Unique ID
   labels: {
     singular: 'Code Box',
     plural: 'Code Boxes',
@@ -23,8 +23,16 @@ export const CodeBlock: Block = {
     },
     {
       name: 'code',
-      type: 'code', // Syntax highlighting in Admin
+      type: 'textarea', // Textarea is safer than 'code' field for imports
       required: true,
+      admin: {
+        style: {
+          fontFamily: 'monospace',
+          backgroundColor: '#1a1b26',
+          color: '#a9b1d6',
+          minHeight: '150px',
+        }
+      }
     },
   ],
 }
