@@ -68,7 +68,7 @@ export const Articles: CollectionConfig = {
 
             // 2. HTML
             const rawHtml = await marked(cleanMarkdown);
-            console.log('First 50 chars of HTML:', rawHtml.substring(0, 50));
+            console.log('🔍 DEBUG HTML SNIPPET:', rawHtml.substring(0, 200)); // CHECK THIS LOG!
 
             // 3. Tools
             const { 
@@ -96,12 +96,12 @@ export const Articles: CollectionConfig = {
               JSDOM: JSDOM,
               converters: [
                 ({ node }: { node: any }) => {
-                  // Log every node to check if PRE is being seen
-                  // console.log('Processing node:', node.nodeName);
+                  // LOG EVERY NODE TO SEE WHAT WE ARE MISSING
+                  // console.log('Processing Node:', node.nodeName); 
 
-                  // Case-Insensitive Check for PRE tag
-                  if (node.nodeName && node.nodeName.toUpperCase() === 'PRE') {
-                    console.log('⚡ FOUND PRE TAG! Converting to Custom Block...');
+                  // Match PRE or DIV wrapping code
+                  if (node.nodeName === 'PRE') {
+                    console.log('⚡ FOUND PRE TAG! Converting...');
                     
                     const codeElement = node.querySelector('code');
                     const text = codeElement ? codeElement.textContent : node.textContent;
