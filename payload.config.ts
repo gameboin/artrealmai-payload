@@ -1,8 +1,14 @@
+// payload.config.ts
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
-import { 
+import {
   lexicalEditor,
   FixedToolbarFeature,
   InlineToolbarFeature,
+  // Import CodeBlockFeature explicitly
+  // @ts-ignore
+  CodeBlockFeature,
+  // @ts-ignore
+  CodeFeature,
 } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
@@ -10,7 +16,7 @@ import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 import { s3Storage } from '@payloadcms/storage-s3'
 
-import { collections } from './collections' 
+import { collections } from './collections'
 import { GlossaryImporter } from './globals/GlossaryImporter'
 
 const filename = fileURLToPath(import.meta.url)
@@ -22,21 +28,28 @@ export default buildConfig({
     importMap: { baseDir: path.resolve(dirname) },
   },
 
-  collections: collections, 
+  collections: collections,
 
   globals: [
     GlossaryImporter,
   ],
 
   editor: lexicalEditor({
-    features: ({ defaultFeatures }) => [
-      // 1. Load Defaults (Includes Native Code Blocks, Bold, Lists, etc.)
-      ...defaultFeatures,
-      
-      // 2. Enable Toolbars so you can click buttons
-      FixedToolbarFeature(),
-      InlineToolbarFeature(),
-    ],
+    features: ({ defaultFeatures }) => {
+      const features = [
+        ...defaultFeatures,
+        FixedToolbarFeature(),
+        InlineToolbarFeature(),
+      ];
+
+      if (typeof CodeBlockFeature === 'function') {
+        features.push(CodeBlockFeature());
+      } else if (typeof CodeFeature === 'function') {
+        features.push(CodeFeature());
+      }
+
+      return features;
+    },
   }),
 
   secret: process.env.PAYLOAD_SECRET || 'fallback-secret',
@@ -44,13 +57,12 @@ export default buildConfig({
   db: mongooseAdapter({ url: process.env.DATABASE_URI || '' }),
   sharp,
 
-  // FIX: Clean URLs (Plain strings, no markdown)
   cors: [
     'https://artrealmai.com',
     'https://www.artrealmai.com',
     'http://localhost:3000',
-    'http://localhost:5500', 
-    'http://127.0.0.1:5500', 
+    'http://localhost:5500',
+    'http://127.0.0.1:5500',
   ],
   csrf: [
     'https://artrealmai.com',

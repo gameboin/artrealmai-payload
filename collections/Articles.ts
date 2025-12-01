@@ -70,42 +70,25 @@ export const Articles: CollectionConfig = {
 
             // 3. Import Tools
             const lexicalModule = await import('@payloadcms/richtext-lexical');
-            const { 
-                convertHTMLToLexical, 
+            const {
+                convertHTMLToLexical,
                 sanitizeServerEditorConfig,
-                // Explicitly import features to guarantee they exist
-                ParagraphFeature,
-                HeadingFeature,
-                BoldFeature,
-                ItalicFeature,
-                UnderlineFeature,
-                LinkFeature,
-                BlockquoteFeature,
-                OrderedListFeature,
-                UnorderedListFeature,
-                InlineCodeFeature,
+                defaultEditorFeatures,
             } = lexicalModule;
-            
+
             const { JSDOM } = await import('jsdom');
 
-            // 4. Build Config (Explicit + Default fallback)
-            const rawConfig = {
-              features: [
-                ParagraphFeature(),
-                HeadingFeature({ enabledHeadingSizes: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] }),
-                BoldFeature(),
-                ItalicFeature(),
-                UnderlineFeature(),
-                LinkFeature({}),
-                BlockquoteFeature(),
-                OrderedListFeature(),
-                UnorderedListFeature(),
-                InlineCodeFeature(),
-                // Add defaults to catch anything we missed (like Code Blocks)
-                ...lexicalModule.defaultEditorFeatures,
-              ]
-            };
+            // 4. Config
+            const features = [...defaultEditorFeatures];
+            
+            // Dynamically find Code Feature
+            // @ts-ignore
+            const CodeFeatureFound = lexicalModule.CodeBlockFeature || lexicalModule.CodeFeature;
+            if (CodeFeatureFound) {
+                features.push(CodeFeatureFound());
+            }
 
+            const rawConfig = { features };
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
             // 5. CONVERT (Mapping <pre> to NATIVE 'code' block)
@@ -126,7 +109,7 @@ export const Articles: CollectionConfig = {
                     }
 
                     return {
-                      type: 'code', 
+                      type: 'code',
                       language: lang,
                       children: [{
                         type: 'text',
