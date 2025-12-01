@@ -1,5 +1,6 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
+import { CodeBlock } from '../blocks/CodeBlock' // Import block
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -9,7 +10,6 @@ export const Articles: CollectionConfig = {
   },
   access: {
     read: () => true,
-    // RELAXED ACCESS: If you are logged in, you can save.
     create: ({ req: { user } }) => !!user,
     update: ({ req: { user } }) => !!user,
     delete: ({ req: { user } }) => !!user,
@@ -57,7 +57,7 @@ export const Articles: CollectionConfig = {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
 
           try {
-            // 1. Unwrap
+            // 1. Unwrap Markdown
             let cleanMarkdown = data.markdownImport.trim();
             if (cleanMarkdown.startsWith('```') && cleanMarkdown.endsWith('```')) {
                 const lines = cleanMarkdown.split('\n');
@@ -66,49 +66,56 @@ export const Articles: CollectionConfig = {
                 }
             }
 
-            // 2. HTML
+            // 2. Convert to HTML
             const rawHtml = await marked(cleanMarkdown);
 
-            // 3. Tools
+            // 3. Import Tools
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
                 defaultEditorFeatures,
+                BlocksFeature, // Required for custom blocks
             } = await import('@payloadcms/richtext-lexical');
+            
             const { JSDOM } = await import('jsdom');
 
             // 4. Config
-            const rawConfig = { features: [...defaultEditorFeatures] };
+            const rawConfig = {
+              features: [
+                ...defaultEditorFeatures,
+                BlocksFeature({ blocks: [CodeBlock] }), // Register it here too!
+              ]
+            };
+
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. Convert (Mapping <pre> to 'code' block)
+            // 5. CONVERT
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
               converters: [
+                // MAP <pre> to CUSTOM 'code-block'
                 ({ node }: { node: any }) => {
                   if (node.nodeName === 'PRE') {
                     const codeElement = node.querySelector('code');
                     const text = codeElement ? codeElement.textContent : node.textContent;
+                    
                     let lang = 'plaintext';
                     if (codeElement && codeElement.className) {
                         const match = codeElement.className.match(/language-(\w+)/);
                         if (match) lang = match[1];
                     }
+
                     return {
-                      type: 'code', 
-                      language: lang,
-                      children: [{
-                        type: 'text',
-                        text: text || '',
-                        format: 0,
-                        detail: 0,
-                        mode: 'normal',
-                        style: '',
-                      }],
+                      type: 'block', // This says "I am a Block"
+                      fields: {
+                        blockType: 'code-block', // Must match slug in CodeBlock.ts
+                        code: text || '',
+                        language: lang,
+                      },
                       format: '',
-                      version: 1,
+                      version: 2,
                     };
                   }
                   return null;
