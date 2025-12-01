@@ -1,6 +1,6 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
-import { CodeBlock } from '../blocks/CodeBlock' // Import the block def
+import { CodeBlock } from '../blocks/CodeBlock' 
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -9,12 +9,14 @@ export const Articles: CollectionConfig = {
     defaultColumns: ['title', 'author', 'publishedDate', 'status'],
   },
   access: {
-    read: () => true,
-    create: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
-    update: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
-    delete: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
+    read: () => true, // Public can read
+    // CHANGE: Allow ANY logged-in user to create/edit/delete
+    create: ({ req: { user } }) => !!user,
+    update: ({ req: { user } }) => !!user,
+    delete: ({ req: { user } }) => !!user,
   },
   fields: [
+    // ... (Keep all your existing fields exactly as they are) ...
     { name: 'title', type: 'text', required: true },
     {
       name: 'markdownImport',
