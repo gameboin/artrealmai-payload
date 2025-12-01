@@ -1,5 +1,6 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
+import { CodeBlock } from '../blocks/CodeBlock' 
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -69,34 +70,32 @@ export const Articles: CollectionConfig = {
             const rawHtml = await marked(cleanMarkdown);
 
             // 3. Import Tools
-            const lexicalModule = await import('@payloadcms/richtext-lexical');
-            const {
-                convertHTMLToLexical,
+            const { 
+                convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
                 defaultEditorFeatures,
-            } = lexicalModule;
-
+                BlocksFeature,
+            } = await import('@payloadcms/richtext-lexical');
+            
             const { JSDOM } = await import('jsdom');
 
             // 4. Config
-            const features = [...defaultEditorFeatures];
-            
-            // Dynamically find Code Feature
-            // @ts-ignore
-            const CodeFeatureFound = lexicalModule.CodeBlockFeature || lexicalModule.CodeFeature;
-            if (CodeFeatureFound) {
-                features.push(CodeFeatureFound());
-            }
+            const rawConfig = {
+              features: [
+                ...defaultEditorFeatures,
+                BlocksFeature({ blocks: [CodeBlock] }), // Add our block
+              ]
+            };
 
-            const rawConfig = { features };
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. CONVERT (Mapping <pre> to NATIVE 'code' block)
+            // 5. CONVERT
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
               converters: [
+                // MAP <pre> to CUSTOM 'code-block'
                 ({ node }: { node: any }) => {
                   if (node.nodeName === 'PRE') {
                     const codeElement = node.querySelector('code');
@@ -109,18 +108,14 @@ export const Articles: CollectionConfig = {
                     }
 
                     return {
-                      type: 'code',
-                      language: lang,
-                      children: [{
-                        type: 'text',
-                        text: text || '',
-                        format: 0,
-                        detail: 0,
-                        mode: 'normal',
-                        style: '',
-                      }],
+                      type: 'block', // It's a Block
+                      fields: {
+                        blockType: 'code-block', // Matches slug
+                        code: text || '',
+                        language: lang,
+                      },
                       format: '',
-                      version: 1,
+                      version: 2,
                     };
                   }
                   return null;
