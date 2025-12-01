@@ -57,7 +57,7 @@ export const Articles: CollectionConfig = {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
 
           try {
-            // 1. Unwrap
+            // 1. Unwrap Markdown
             let cleanMarkdown = data.markdownImport.trim();
             if (cleanMarkdown.startsWith('```') && cleanMarkdown.endsWith('```')) {
                 const lines = cleanMarkdown.split('\n');
@@ -66,16 +66,17 @@ export const Articles: CollectionConfig = {
                 }
             }
 
-            // 2. HTML
+            // 2. Convert to HTML
             const rawHtml = await marked(cleanMarkdown);
+            // Log HTML length to ensure we actually have content
+            console.log(`📄 HTML Generated: ${rawHtml.length} chars`);
 
-            // 3. Tools
+            // 3. Import Tools
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
                 defaultEditorFeatures,
                 BlocksFeature,
-                InlineCodeFeature, // <--- Added this
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
@@ -84,7 +85,6 @@ export const Articles: CollectionConfig = {
             const rawConfig = {
               features: [
                 ...defaultEditorFeatures,
-                InlineCodeFeature(), // <--- Added this
                 BlocksFeature({ blocks: [CodeBlock] }),
               ]
             };
@@ -98,10 +98,12 @@ export const Articles: CollectionConfig = {
               JSDOM: JSDOM,
               converters: [
                 ({ node }: { node: any }) => {
-                  // CASE INSENSITIVE CHECK FOR <PRE>
-                  if (node.nodeName && node.nodeName.toUpperCase() === 'PRE') {
-                    console.log('⚡ MATCHED <PRE> TAG');
-                    
+                  // LOGGING: See what nodes we are traversing
+                  // console.log('Node:', node.nodeName); 
+
+                  // CHECK 1: Standard <PRE> block
+                  if (node.nodeName === 'PRE') {
+                    console.log('⚡ MATCH: Found <PRE> block!');
                     const codeElement = node.querySelector('code');
                     const text = codeElement ? codeElement.textContent : node.textContent;
                     
@@ -122,6 +124,26 @@ export const Articles: CollectionConfig = {
                       version: 2,
                     };
                   }
+                  
+                  // CHECK 2: Standalone <CODE> block (fallback)
+                  // Sometimes marked outputs just <code> if it's not wrapped in pre
+                  if (node.nodeName === 'CODE' && node.parentNode.nodeName !== 'PRE') {
+                     // Only treat as block if it contains newlines, otherwise it's inline
+                     if (node.textContent.includes('\n')) {
+                        console.log('⚡ MATCH: Found standalone <CODE> block!');
+                        return {
+                          type: 'block', 
+                          fields: {
+                            blockType: 'code-block',
+                            code: node.textContent || '',
+                            language: 'plaintext',
+                          },
+                          format: '',
+                          version: 2,
+                        };
+                     }
+                  }
+
                   return null;
                 },
               ]
