@@ -1,6 +1,5 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
-import { Code } from '../blocks/Code' // Import your custom block
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -74,55 +73,57 @@ export const Articles: CollectionConfig = {
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
                 defaultEditorFeatures,
-                BlocksFeature,
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
 
-            // 4. Config with Custom Block
+            // 4. Config
             const rawConfig = {
               features: [
                 ...defaultEditorFeatures,
-                BlocksFeature({ blocks: [Code] }),
               ]
             };
 
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. CONVERT (With Type Override)
-            // We cast the options object to 'any' to suppress the TS error about 'converters'
+            // 5. CONVERT (Fixed Types)
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
               converters: [
-                ({ node, converters, parent }) => {
+                // FIX: Explicitly type 'node' as any, remove unused variables
+                ({ node }: { node: any }) => {
                   if (node.nodeName === 'PRE') {
                     const codeElement = node.querySelector('code');
-                    const codeText = codeElement ? codeElement.textContent : node.textContent;
+                    const text = codeElement ? codeElement.textContent : node.textContent;
                     
-                    let language = 'plaintext';
+                    let lang = 'plaintext';
                     if (codeElement && codeElement.className) {
                         const match = codeElement.className.match(/language-(\w+)/);
-                        if (match) language = match[1];
+                        if (match) lang = match[1];
                     }
 
-                    // Map <pre> to our Custom Code Block
+                    // Return NATIVE 'code' node structure
                     return {
-                      type: 'block',
-                      fields: {
-                        blockType: 'code',
-                        code: codeText || '',
-                        language: language,
-                      },
+                      type: 'code', 
+                      language: lang,
+                      children: [{
+                        type: 'text',
+                        text: text || '',
+                        format: 0,
+                        detail: 0,
+                        mode: 'normal',
+                        style: '',
+                      }],
                       format: '',
-                      version: 2,
+                      version: 1,
                     };
                   }
                   return null;
                 },
               ]
-            } as any); // <--- THE KEY FIX IS HERE
+            } as any);
 
             // 6. Save
             if (lexicalData && lexicalData.root) {
