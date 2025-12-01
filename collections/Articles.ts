@@ -21,7 +21,7 @@ export const Articles: CollectionConfig = {
       type: 'textarea',
       label: '⚡ Markdown Importer',
       admin: {
-        description: 'Paste raw markdown here. The system will auto-clean wrapping tags.',
+        description: 'Paste raw markdown here. Check the box below to run.',
         position: 'sidebar',
         rows: 8,
       },
@@ -68,8 +68,8 @@ export const Articles: CollectionConfig = {
 
             // 2. Convert to HTML
             const rawHtml = await marked(cleanMarkdown);
-            // Log HTML length to ensure we actually have content
-            console.log(`📄 HTML Generated: ${rawHtml.length} chars`);
+            // LOG THE HTML SO WE CAN SEE IF <PRE> EXISTS
+            console.log('📄 GENERATED HTML (First 200 chars):', rawHtml.substring(0, 200));
 
             // 3. Import Tools
             const { 
@@ -77,6 +77,7 @@ export const Articles: CollectionConfig = {
                 sanitizeServerEditorConfig,
                 defaultEditorFeatures,
                 BlocksFeature,
+                InlineCodeFeature, // Explicitly import Inline Code
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
@@ -85,25 +86,29 @@ export const Articles: CollectionConfig = {
             const rawConfig = {
               features: [
                 ...defaultEditorFeatures,
+                InlineCodeFeature(), // Force Inline Code support
                 BlocksFeature({ blocks: [CodeBlock] }),
               ]
             };
 
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. CONVERT
+            // 5. CONVERT (With Logging)
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
               converters: [
                 ({ node }: { node: any }) => {
-                  // LOGGING: See what nodes we are traversing
-                  // console.log('Node:', node.nodeName); 
+                  // 🔍 DEBUG LOG: Print every node we see
+                  // console.log('👀 Converter saw node:', node.nodeName);
 
-                  // CHECK 1: Standard <PRE> block
-                  if (node.nodeName === 'PRE') {
-                    console.log('⚡ MATCH: Found <PRE> block!');
+                  const nodeName = node.nodeName ? node.nodeName.toUpperCase() : '';
+
+                  // MATCH PRE TAGS
+                  if (nodeName === 'PRE') {
+                    console.log('⚡ MATCHED <PRE> TAG! Creating Code Block...');
+                    
                     const codeElement = node.querySelector('code');
                     const text = codeElement ? codeElement.textContent : node.textContent;
                     
@@ -125,25 +130,6 @@ export const Articles: CollectionConfig = {
                     };
                   }
                   
-                  // CHECK 2: Standalone <CODE> block (fallback)
-                  // Sometimes marked outputs just <code> if it's not wrapped in pre
-                  if (node.nodeName === 'CODE' && node.parentNode.nodeName !== 'PRE') {
-                     // Only treat as block if it contains newlines, otherwise it's inline
-                     if (node.textContent.includes('\n')) {
-                        console.log('⚡ MATCH: Found standalone <CODE> block!');
-                        return {
-                          type: 'block', 
-                          fields: {
-                            blockType: 'code-block',
-                            code: node.textContent || '',
-                            language: 'plaintext',
-                          },
-                          format: '',
-                          version: 2,
-                        };
-                     }
-                  }
-
                   return null;
                 },
               ]
