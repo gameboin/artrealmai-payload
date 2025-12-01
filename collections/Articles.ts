@@ -1,6 +1,5 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
-import { CodeBlock } from '../blocks/CodeBlock' // Import block
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -74,28 +73,23 @@ export const Articles: CollectionConfig = {
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
                 defaultEditorFeatures,
-                BlocksFeature, // Required for custom blocks
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
 
             // 4. Config
             const rawConfig = {
-              features: [
-                ...defaultEditorFeatures,
-                BlocksFeature({ blocks: [CodeBlock] }), // Register it here too!
-              ]
+              features: [...defaultEditorFeatures]
             };
 
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. CONVERT
+            // 5. CONVERT (Mapping <pre> to NATIVE 'code' block)
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
               converters: [
-                // MAP <pre> to CUSTOM 'code-block'
                 ({ node }: { node: any }) => {
                   if (node.nodeName === 'PRE') {
                     const codeElement = node.querySelector('code');
@@ -107,15 +101,20 @@ export const Articles: CollectionConfig = {
                         if (match) lang = match[1];
                     }
 
+                    // Return NATIVE 'code' node structure
                     return {
-                      type: 'block', // This says "I am a Block"
-                      fields: {
-                        blockType: 'code-block', // Must match slug in CodeBlock.ts
-                        code: text || '',
-                        language: lang,
-                      },
+                      type: 'code', 
+                      language: lang,
+                      children: [{
+                        type: 'text',
+                        text: text || '',
+                        format: 0,
+                        detail: 0,
+                        mode: 'normal',
+                        style: '',
+                      }],
                       format: '',
-                      version: 2,
+                      version: 1,
                     };
                   }
                   return null;
