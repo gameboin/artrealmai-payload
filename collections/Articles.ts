@@ -1,5 +1,6 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
+import { Code } from '../blocks/Code' // Import your custom block
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -73,55 +74,55 @@ export const Articles: CollectionConfig = {
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
                 defaultEditorFeatures,
+                BlocksFeature,
             } = await import('@payloadcms/richtext-lexical');
             
             const { JSDOM } = await import('jsdom');
 
-            // 4. Config
+            // 4. Config with Custom Block
             const rawConfig = {
-              features: [...defaultEditorFeatures]
+              features: [
+                ...defaultEditorFeatures,
+                BlocksFeature({ blocks: [Code] }),
+              ]
             };
 
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. CONVERT (With Manual Code Mapping)
+            // 5. CONVERT (With Type Override)
+            // We cast the options object to 'any' to suppress the TS error about 'converters'
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
               converters: [
-                // MAP <pre> TO NATIVE CODE BLOCK
-                ({ node }: { node: any }) => {
+                ({ node, converters, parent }) => {
                   if (node.nodeName === 'PRE') {
                     const codeElement = node.querySelector('code');
-                    const text = codeElement ? codeElement.textContent : node.textContent;
+                    const codeText = codeElement ? codeElement.textContent : node.textContent;
                     
-                    let lang = 'plaintext';
+                    let language = 'plaintext';
                     if (codeElement && codeElement.className) {
                         const match = codeElement.className.match(/language-(\w+)/);
-                        if (match) lang = match[1];
+                        if (match) language = match[1];
                     }
 
-                    // Return NATIVE 'code' node structure
+                    // Map <pre> to our Custom Code Block
                     return {
-                      type: 'code', 
-                      language: lang,
-                      children: [{
-                        type: 'text',
-                        text: text || '',
-                        format: 0,
-                        detail: 0,
-                        mode: 'normal',
-                        style: '',
-                      }],
+                      type: 'block',
+                      fields: {
+                        blockType: 'code',
+                        code: codeText || '',
+                        language: language,
+                      },
                       format: '',
-                      version: 1,
+                      version: 2,
                     };
                   }
                   return null;
                 },
               ]
-            } as any);
+            } as any); // <--- THE KEY FIX IS HERE
 
             // 6. Save
             if (lexicalData && lexicalData.root) {
