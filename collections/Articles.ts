@@ -66,18 +66,18 @@ export const Articles: CollectionConfig = {
                 }
             }
 
-            // 2. EXTRACTION: Find code blocks and replace with placeholders
+            // 2. EXTRACTION: Use a "Safe" Placeholder (Triple Brackets)
+            // This prevents Markdown from trying to format it as bold/italic
             const codeBlocks: any[] = [];
             const blockRegex = /```(\w*)\n([\s\S]*?)```/g;
             
-            // FIX: Typed arguments and used _match to ignore unused variable
             const processedMarkdown = cleanMarkdown.replace(blockRegex, (_match: string, lang: string, code: string) => {
                 const index = codeBlocks.length;
                 codeBlocks.push({
                     lang: lang || 'plaintext',
                     code: code.trim()
                 });
-                return `__PAYLOAD_CODE_BLOCK_${index}__`;
+                return `[[[CODE_BLOCK_${index}]]]`; // No underscores in the ID part to be safe
             });
 
             // 3. Convert modified Markdown to HTML
@@ -108,12 +108,23 @@ export const Articles: CollectionConfig = {
               JSDOM: JSDOM,
             });
 
-            // 7. SWAP: Find placeholders and inject Custom Blocks
-            if (lexicalData && lexicalData.root && lexicalData.root.children) {
-                const newChildren = lexicalData.root.children.map((node: any) => {
-                    if (node.type === 'paragraph' && node.children) {
-                        const textContent = node.children.map((c: any) => c.text).join('');
-                        const match = textContent.match(/__PAYLOAD_CODE_BLOCK_(\d+)__/);
+            // 7. RECURSIVE SWAPPER (Finds placeholders deeply nested in lists)
+            const swapPlaceholders = (nodes: any[]): any[] => {
+                return nodes.map((node) => {
+                    // If this node has children (like a list or paragraph), recurse first
+                    if (node.children && Array.isArray(node.children)) {
+                        node.children = swapPlaceholders(node.children);
+                    }
+
+                    // Check if this node is a text-containing node that holds our placeholder
+                    // We look for paragraphs or generic blocks that might contain the text
+                    if (node.type === 'paragraph' || node.text) {
+                        // Extract text content safely
+                        let textContent = '';
+                        if (node.text) textContent = node.text;
+                        else if (node.children) textContent = node.children.map((c: any) => c.text).join('');
+                        
+                        const match = textContent.match(/\[\[\[CODE_BLOCK_(\d+)\]\]\]/);
                         
                         if (match) {
                             const index = parseInt(match[1]);
@@ -121,6 +132,7 @@ export const Articles: CollectionConfig = {
                             
                             if (blockData) {
                                 console.log(`⚡ Restoring Code Block ${index} (${blockData.lang})`);
+                                // REPLACE this paragraph node with our Custom Block Node
                                 return {
                                     type: 'block',
                                     fields: {
@@ -136,8 +148,11 @@ export const Articles: CollectionConfig = {
                     }
                     return node;
                 });
+            };
 
-                lexicalData.root.children = newChildren;
+            // 8. Run the Swapper
+            if (lexicalData && lexicalData.root && lexicalData.root.children) {
+                lexicalData.root.children = swapPlaceholders(lexicalData.root.children);
                 
                 data.content = lexicalData;
                 data.markdownImport = null;
