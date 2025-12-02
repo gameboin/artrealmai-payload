@@ -1,6 +1,5 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
-import { CodeBlock } from '../blocks/CodeBlock'
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -10,18 +9,24 @@ export const Articles: CollectionConfig = {
   },
   access: {
     read: () => true,
+    // Relaxed access: Any logged-in user can manage articles
     create: ({ req: { user } }) => !!user,
     update: ({ req: { user } }) => !!user,
     delete: ({ req: { user } }) => !!user,
   },
   fields: [
-    { name: 'title', type: 'text', required: true },
+    {
+      name: 'title',
+      type: 'text',
+      required: true,
+    },
+    // --- IMPORT FIELD ---
     {
       name: 'markdownImport',
       type: 'textarea',
       label: '⚡ Markdown Importer',
       admin: {
-        description: 'Paste raw markdown here.',
+        description: 'Paste raw markdown here. The system will auto-clean wrapping tags.',
         position: 'sidebar',
         rows: 8,
       },
@@ -33,15 +38,47 @@ export const Articles: CollectionConfig = {
       defaultValue: false,
       admin: {
         position: 'sidebar',
-        description: 'WARNING: Overwrites content!',
+        description: 'WARNING: This overwrites existing content!',
       },
     },
-    { name: 'slug', type: 'text', unique: true, required: true, index: true, admin: { position: 'sidebar' } },
-    { name: 'excerpt', type: 'textarea', admin: { description: 'Short teaser for homepage' } },
-    { name: 'content', type: 'richText', required: true },
-    { name: 'featuredImage', type: 'upload', relationTo: 'media', required: true },
-    { name: 'author', type: 'relationship', relationTo: 'authors', admin: { position: 'sidebar' } },
-    { name: 'tags', type: 'relationship', relationTo: 'tags', hasMany: true, admin: { position: 'sidebar' } },
+    // ------------------------------
+    {
+      name: 'slug',
+      type: 'text',
+      unique: true,
+      required: true,
+      index: true,
+      admin: { position: 'sidebar' },
+    },
+    {
+      name: 'excerpt',
+      type: 'textarea',
+      admin: { description: 'Short teaser for homepage' },
+    },
+    {
+      name: 'content',
+      type: 'richText',
+      required: true,
+    },
+    {
+      name: 'featuredImage',
+      type: 'upload',
+      relationTo: 'media',
+      required: true,
+    },
+    {
+      name: 'author',
+      type: 'relationship',
+      relationTo: 'authors',
+      admin: { position: 'sidebar' },
+    },
+    {
+      name: 'tags',
+      type: 'relationship',
+      relationTo: 'tags',
+      hasMany: true,
+      admin: { position: 'sidebar' },
+    },
     {
       name: 'publishedDate',
       type: 'date',
@@ -54,66 +91,78 @@ export const Articles: CollectionConfig = {
     beforeChange: [
       async ({ data, req }) => {
         if (data.markdownImport && data.doImport) {
-          console.log('🚀 STARTING IMPORT...');
+          console.log('🚀 STARTING MARKDOWN IMPORT...');
 
           try {
+            // 1. Unwrap Markdown (Remove surrounding ```markdown ... ``` if present)
             let cleanMarkdown = data.markdownImport.trim();
             if (cleanMarkdown.startsWith('```') && cleanMarkdown.endsWith('```')) {
                 const lines = cleanMarkdown.split('\n');
-                if (lines.length >= 2) cleanMarkdown = lines.slice(1, -1).join('\n').trim();
+                if (lines.length >= 2) {
+                    cleanMarkdown = lines.slice(1, -1).join('\n').trim();
+                }
             }
 
+            // 2. Convert Markdown to HTML
             const rawHtml = await marked(cleanMarkdown);
-            
+
+            // 3. Load Tools Dynamically
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
-                defaultEditorFeatures,
-                BlocksFeature
+                defaultEditorFeatures, // Use the Native Defaults
             } = await import('@payloadcms/richtext-lexical');
+            
             const { JSDOM } = await import('jsdom');
 
-            // Ensure the Converter knows about our Custom Block
+            // 4. Configure Editor for Conversion
+            // We use default features because they include the Native Code Block
             const rawConfig = {
               features: [
                 ...defaultEditorFeatures,
-                BlocksFeature({ blocks: [CodeBlock] }),
               ]
             };
 
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
+            // 5. CONVERT HTML -> LEXICAL
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
               converters: [
                 ({ node }: { node: any }) => {
-                  // LOGGING
-                  if (node.nodeName) console.log('Node:', node.nodeName);
+                  const nodeName = node.nodeName ? node.nodeName.toUpperCase() : '';
 
-                  // MAP <PRE> -> CUSTOM BLOCK
-                  if (node.nodeName === 'PRE') {
-                    console.log('⚡ FOUND PRE! Converting to Custom Block...');
-                    
+                  // MATCH <PRE> TAGS
+                  if (nodeName === 'PRE') {
                     const codeElement = node.querySelector('code');
                     const text = codeElement ? codeElement.textContent : node.textContent;
                     
                     let lang = 'plaintext';
+                    // Try to find class="language-bash"
                     if (codeElement && codeElement.className) {
                         const match = codeElement.className.match(/language-(\w+)/);
                         if (match) lang = match[1];
+                    } else if (node.className) {
+                        const match = node.className.match(/language-(\w+)/);
+                        if (match) lang = match[1];
                     }
 
+                    // RETURN NATIVE CODE BLOCK STRUCTURE
                     return {
-                      type: 'block',
-                      fields: {
-                        blockType: 'code-block',
-                        code: text || '',
-                        language: lang,
-                      },
+                      type: 'code', // This triggers the built-in code block
+                      language: lang,
+                      children: [{
+                        type: 'text',
+                        text: text || '',
+                        format: 0,
+                        detail: 0,
+                        mode: 'normal',
+                        style: '',
+                      }],
                       format: '',
-                      version: 2,
+                      version: 1,
                     };
                   }
                   return null;
@@ -121,11 +170,14 @@ export const Articles: CollectionConfig = {
               ]
             } as any);
 
+            // 6. Save Data
             if (lexicalData && lexicalData.root) {
               data.content = lexicalData;
               data.markdownImport = null;
               data.doImport = false;
-              console.log('✅ Import Success.');
+              console.log('✅ Import Success: Content overwritten.');
+            } else {
+              console.error('❌ Lexical Conversion failed (Root was empty)');
             }
 
           } catch (error) {
