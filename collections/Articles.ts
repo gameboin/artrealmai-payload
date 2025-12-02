@@ -1,5 +1,6 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
+import { CodeBlock } from '../blocks/CodeBlock'
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
@@ -9,18 +10,12 @@ export const Articles: CollectionConfig = {
   },
   access: {
     read: () => true,
-    // Relaxed access: Any logged-in user can manage articles
     create: ({ req: { user } }) => !!user,
     update: ({ req: { user } }) => !!user,
     delete: ({ req: { user } }) => !!user,
   },
   fields: [
-    {
-      name: 'title',
-      type: 'text',
-      required: true,
-    },
-    // --- IMPORT FIELD ---
+    { name: 'title', type: 'text', required: true },
     {
       name: 'markdownImport',
       type: 'textarea',
@@ -41,44 +36,12 @@ export const Articles: CollectionConfig = {
         description: 'WARNING: This overwrites existing content!',
       },
     },
-    // ------------------------------
-    {
-      name: 'slug',
-      type: 'text',
-      unique: true,
-      required: true,
-      index: true,
-      admin: { position: 'sidebar' },
-    },
-    {
-      name: 'excerpt',
-      type: 'textarea',
-      admin: { description: 'Short teaser for homepage' },
-    },
-    {
-      name: 'content',
-      type: 'richText',
-      required: true,
-    },
-    {
-      name: 'featuredImage',
-      type: 'upload',
-      relationTo: 'media',
-      required: true,
-    },
-    {
-      name: 'author',
-      type: 'relationship',
-      relationTo: 'authors',
-      admin: { position: 'sidebar' },
-    },
-    {
-      name: 'tags',
-      type: 'relationship',
-      relationTo: 'tags',
-      hasMany: true,
-      admin: { position: 'sidebar' },
-    },
+    { name: 'slug', type: 'text', unique: true, required: true, index: true, admin: { position: 'sidebar' } },
+    { name: 'excerpt', type: 'textarea', admin: { description: 'Short teaser for homepage' } },
+    { name: 'content', type: 'richText', required: true },
+    { name: 'featuredImage', type: 'upload', relationTo: 'media', required: true },
+    { name: 'author', type: 'relationship', relationTo: 'authors', admin: { position: 'sidebar' } },
+    { name: 'tags', type: 'relationship', relationTo: 'tags', hasMany: true, admin: { position: 'sidebar' } },
     {
       name: 'publishedDate',
       type: 'date',
@@ -94,7 +57,7 @@ export const Articles: CollectionConfig = {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
 
           try {
-            // 1. Unwrap Markdown (Remove surrounding ```markdown ... ``` if present)
+            // 1. Unwrap Markdown
             let cleanMarkdown = data.markdownImport.trim();
             if (cleanMarkdown.startsWith('```') && cleanMarkdown.endsWith('```')) {
                 const lines = cleanMarkdown.split('\n');
@@ -103,81 +66,83 @@ export const Articles: CollectionConfig = {
                 }
             }
 
-            // 2. Convert Markdown to HTML
-            const rawHtml = await marked(cleanMarkdown);
+            // 2. EXTRACTION: Find code blocks and replace with placeholders
+            const codeBlocks: any[] = [];
+            const blockRegex = /```(\w*)\n([\s\S]*?)```/g;
+            
+            // FIX: Typed arguments and used _match to ignore unused variable
+            const processedMarkdown = cleanMarkdown.replace(blockRegex, (_match: string, lang: string, code: string) => {
+                const index = codeBlocks.length;
+                codeBlocks.push({
+                    lang: lang || 'plaintext',
+                    code: code.trim()
+                });
+                return `__PAYLOAD_CODE_BLOCK_${index}__`;
+            });
 
-            // 3. Load Tools Dynamically
+            // 3. Convert modified Markdown to HTML
+            const rawHtml = await marked(processedMarkdown);
+
+            // 4. Import Tools
             const { 
                 convertHTMLToLexical, 
                 sanitizeServerEditorConfig,
-                defaultEditorFeatures, // Use the Native Defaults
+                defaultEditorFeatures,
+                BlocksFeature
             } = await import('@payloadcms/richtext-lexical');
-            
             const { JSDOM } = await import('jsdom');
 
-            // 4. Configure Editor for Conversion
-            // We use default features because they include the Native Code Block
+            // 5. Config
             const rawConfig = {
               features: [
                 ...defaultEditorFeatures,
+                BlocksFeature({ blocks: [CodeBlock] }),
               ]
             };
-
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);
 
-            // 5. CONVERT HTML -> LEXICAL
+            // 6. Convert HTML to Lexical
             const lexicalData = await convertHTMLToLexical({
               html: rawHtml,
               editorConfig: sanitizedConfig,
               JSDOM: JSDOM,
-              converters: [
-                ({ node }: { node: any }) => {
-                  const nodeName = node.nodeName ? node.nodeName.toUpperCase() : '';
+            });
 
-                  // MATCH <PRE> TAGS
-                  if (nodeName === 'PRE') {
-                    const codeElement = node.querySelector('code');
-                    const text = codeElement ? codeElement.textContent : node.textContent;
-                    
-                    let lang = 'plaintext';
-                    // Try to find class="language-bash"
-                    if (codeElement && codeElement.className) {
-                        const match = codeElement.className.match(/language-(\w+)/);
-                        if (match) lang = match[1];
-                    } else if (node.className) {
-                        const match = node.className.match(/language-(\w+)/);
-                        if (match) lang = match[1];
+            // 7. SWAP: Find placeholders and inject Custom Blocks
+            if (lexicalData && lexicalData.root && lexicalData.root.children) {
+                const newChildren = lexicalData.root.children.map((node: any) => {
+                    if (node.type === 'paragraph' && node.children) {
+                        const textContent = node.children.map((c: any) => c.text).join('');
+                        const match = textContent.match(/__PAYLOAD_CODE_BLOCK_(\d+)__/);
+                        
+                        if (match) {
+                            const index = parseInt(match[1]);
+                            const blockData = codeBlocks[index];
+                            
+                            if (blockData) {
+                                console.log(`⚡ Restoring Code Block ${index} (${blockData.lang})`);
+                                return {
+                                    type: 'block',
+                                    fields: {
+                                        blockType: 'code-block',
+                                        language: blockData.lang,
+                                        code: blockData.code,
+                                    },
+                                    format: '',
+                                    version: 2,
+                                };
+                            }
+                        }
                     }
+                    return node;
+                });
 
-                    // RETURN NATIVE CODE BLOCK STRUCTURE
-                    return {
-                      type: 'code', // This triggers the built-in code block
-                      language: lang,
-                      children: [{
-                        type: 'text',
-                        text: text || '',
-                        format: 0,
-                        detail: 0,
-                        mode: 'normal',
-                        style: '',
-                      }],
-                      format: '',
-                      version: 1,
-                    };
-                  }
-                  return null;
-                },
-              ]
-            } as any);
-
-            // 6. Save Data
-            if (lexicalData && lexicalData.root) {
-              data.content = lexicalData;
-              data.markdownImport = null;
-              data.doImport = false;
-              console.log('✅ Import Success: Content overwritten.');
-            } else {
-              console.error('❌ Lexical Conversion failed (Root was empty)');
+                lexicalData.root.children = newChildren;
+                
+                data.content = lexicalData;
+                data.markdownImport = null;
+                data.doImport = false;
+                console.log('✅ Import Success (Code Blocks Restored).');
             }
 
           } catch (error) {
