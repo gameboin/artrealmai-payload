@@ -4,11 +4,10 @@ export const Authors: CollectionConfig = {
   slug: 'authors',
   admin: {
     useAsTitle: 'name',
-    defaultColumns: ['name', 'portrait'],
+    defaultColumns: ['name', 'title', 'slug'],
   },
   access: {
     read: () => true,
-    // FIX: Check if the 'roles' array includes 'admin'
     create: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
     update: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
     delete: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
@@ -18,15 +17,47 @@ export const Authors: CollectionConfig = {
       name: 'name',
       type: 'text',
       required: true,
+    },
+    {
+      name: 'slug',
+      type: 'text',
+      required: true,
       unique: true,
+      index: true,
+      admin: {
+        description: 'URL-friendly name (e.g. aurelia)',
+        position: 'sidebar',
+      },
+    },
+    {
+      name: 'title',
+      type: 'text',
+      label: 'Job Title',
+      admin: {
+        description: 'e.g. Lead Tech Writer',
+      },
+    },
+    {
+      name: 'bio',
+      type: 'textarea',
+      label: 'Biography',
     },
     {
       name: 'portrait',
       type: 'upload',
       relationTo: 'media',
-      admin: {
-        description: 'Author profile picture (optional)',
-      },
+      required: true,
+    },
+    // Social Links Group
+    {
+      name: 'socials',
+      type: 'group',
+      label: 'Social Media',
+      fields: [
+        { name: 'twitter', type: 'text', label: 'Twitter URL' },
+        { name: 'linkedin', type: 'text', label: 'LinkedIn URL' },
+        { name: 'website', type: 'text', label: 'Website URL' },
+      ],
     },
   ],
 }
