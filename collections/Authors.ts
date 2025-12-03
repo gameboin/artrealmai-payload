@@ -1,3 +1,4 @@
+// collections/Authors.ts
 import { CollectionConfig } from 'payload'
 
 export const Authors: CollectionConfig = {
@@ -8,47 +9,23 @@ export const Authors: CollectionConfig = {
   },
   access: {
     read: () => true,
-    create: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
-    update: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
-    delete: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
+    create: ({ req: { user } }) => !!user,
+    update: ({ req: { user } }) => !!user,
+    delete: ({ req: { user } }) => !!user,
   },
   fields: [
-    {
-      name: 'name',
-      type: 'text',
-      required: true,
-    },
-    {
-      name: 'slug',
-      type: 'text',
-      required: true,
-      unique: true,
+    { name: 'name', type: 'text', required: true },
+    { 
+      name: 'slug', 
+      type: 'text', 
+      required: true, 
+      unique: true, 
       index: true,
-      admin: {
-        description: 'URL-friendly name (e.g. aurelia)',
-        position: 'sidebar',
-      },
+      admin: { position: 'sidebar' } 
     },
-    {
-      name: 'title',
-      type: 'text',
-      label: 'Job Title',
-      admin: {
-        description: 'e.g. Lead Tech Writer',
-      },
-    },
-    {
-      name: 'bio',
-      type: 'textarea',
-      label: 'Biography',
-    },
-    {
-      name: 'portrait',
-      type: 'upload',
-      relationTo: 'media',
-      required: true,
-    },
-    // Social Links Group
+    { name: 'title', type: 'text', label: 'Job Title' },
+    { name: 'bio', type: 'textarea', label: 'Biography' },
+    { name: 'portrait', type: 'upload', relationTo: 'media', required: true },
     {
       name: 'socials',
       type: 'group',
