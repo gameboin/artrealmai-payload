@@ -53,8 +53,12 @@ export default buildConfig({
     'https://www.artrealmai.com',
     'http://localhost:3000',
     'http://localhost:5500', 
-    'http://127.0.0.1:5500', 
-  ],
+    'http://127.0.0.1:5500',
+    // Allow Vercel URLs automatically
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '',
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '',
+  ].filter(Boolean),
+  
   csrf: [
     'https://artrealmai.com',
     'https://www.artrealmai.com',
@@ -62,7 +66,10 @@ export default buildConfig({
     'http://localhost:5500',
     'http://127.0.0.1:5500',
     'https://artrealmai-payload.onrender.com',
-  ],
+    // Allow Vercel URLs automatically
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '',
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '',
+  ].filter(Boolean),
 
   plugins: [
     s3Storage({
