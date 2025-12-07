@@ -8,6 +8,14 @@ const __dirname = path.dirname(__filename)
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['payload'],
+  
+  // ADDED: Increase upload limit for Payload Admin (Server Actions)
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '2gb', // Set to 2GB to allow large video files
+    },
+  },
+
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
