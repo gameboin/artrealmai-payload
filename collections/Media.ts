@@ -3,18 +3,20 @@ import type { CollectionConfig } from 'payload'
 export const Media: CollectionConfig = {
   slug: 'media',
   upload: {
-    // 'staticDir' is required by Payload even if using R2 (it uses it for temp storage)
-    staticDir: 'media', 
-    
-    // 1. ALLOW ALL VIDEO & IMAGE TYPES
-    // Using 'video/*' is the most lenient setting possible. 
-    // It accepts mp4, mov, avi, mkv, webm, etc.
+    staticDir: 'media',
     mimeTypes: ['image/*', 'video/*'], 
+    
+    // FIX: We cast 'doc.mimeType' to string to satisfy TypeScript
+    adminThumbnail: ({ doc }) => {
+      const mimeType = doc?.mimeType as string
 
-    // 2. OPTIONAL: CLIENT-SIDE SIZE CHECK
-    // This helps give a clear error immediately if a file is huge 
-    // (e.g., limit to 2GB = 2147483648 bytes)
-    // adminThumbnail: 'thumbnail',
+      // If the file is a video, don't try to resize it (prevents "Unknown Error")
+      if (mimeType?.includes('video')) {
+        return null
+      }
+      // For images, return the default thumbnail behavior
+      return 'thumbnail' 
+    },
   },
   access: {
     read: () => true,
