@@ -6,16 +6,18 @@ export const Media: CollectionConfig = {
     staticDir: 'media',
     mimeTypes: ['image/*', 'video/*'], 
     
-    // FIX: We cast 'doc.mimeType' to string to satisfy TypeScript
+    // FAIL-SAFE FIX: Only try to make thumbnails if we are 100% sure it is an image.
     adminThumbnail: ({ doc }) => {
       const mimeType = doc?.mimeType as string
 
-      // If the file is a video, don't try to resize it (prevents "Unknown Error")
-      if (mimeType?.includes('video')) {
-        return null
+      // If it is strictly an image, make a thumbnail.
+      if (mimeType?.includes('image')) {
+        return 'thumbnail'
       }
-      // For images, return the default thumbnail behavior
-      return 'thumbnail' 
+
+      // For EVERYTHING else (videos, unknown files, PDFs), return null.
+      // This prevents the "Unknown Error" crash on weird video files.
+      return null
     },
   },
   access: {
