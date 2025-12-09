@@ -88,6 +88,8 @@ export default buildConfig({
         },
         region: 'auto',
       },
+      // ADDED: This prevents Payload from trying to write to the Vercel read-only disk
+      disableLocalStorage: true,
     }),
   ],
 })
