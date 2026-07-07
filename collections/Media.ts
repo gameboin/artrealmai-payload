@@ -24,13 +24,19 @@ export const Media: CollectionConfig = {
     pasteURL: {
       allowList: [
         {
+          hostname: 'grok.com',
+        },
+        {
           hostname: 'imagine-public.x.ai',
         },
         {
           hostname: 'images-public.x.ai',
         },
         {
-          hostname: 'grok.com',
+          hostname: '*.x.ai',        // wildcard for all x.ai subdomains
+        },
+        {
+          hostname: 'grok.x.ai',
         },
       ],
     },
