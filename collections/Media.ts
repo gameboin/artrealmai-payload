@@ -20,26 +20,8 @@ export const Media: CollectionConfig = {
       return null
     },
 
-    // pasteURL: Allows pasting Grok Imagine and other external URLs (server-side fetch)
-    pasteURL: {
-      allowList: [
-        {
-          hostname: 'grok.com',
-        },
-        {
-          hostname: 'imagine-public.x.ai',
-        },
-        {
-          hostname: 'images-public.x.ai',
-        },
-        {
-          hostname: '*.x.ai',        // wildcard for all x.ai subdomains
-        },
-        {
-          hostname: 'grok.x.ai',
-        },
-      ],
-    },
+    // Temporary broad test - allows ANY URL
+    pasteURL: true,
   },
   access: {
     read: () => true,
