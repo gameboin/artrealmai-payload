@@ -19,25 +19,6 @@ export const Media: CollectionConfig = {
       // This prevents the "Unknown Error" crash on weird video files.
       return null
     },
-
-    // Enables server-side fetching for external URLs (fixes CORS "Failed to fetch the file")
-    pasteURL: {
-      allowList: [
-        {
-          hostname: 'imagine-public.x.ai',
-        },
-        {
-          hostname: 'images-public.x.ai',
-        },
-        {
-          hostname: 'grok.com',
-        },
-        // Add more domains from other video uploaders here as needed
-        // {
-        //   hostname: 'cdn.yourvideouploader.com',
-        // },
-      ],
-    },
   },
   access: {
     read: () => true,
