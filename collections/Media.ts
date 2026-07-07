@@ -14,16 +14,26 @@ export const Media: CollectionConfig = {
       return null
     },
 
-    // Broad allowList optimized for Grok videos + images
+    // Very permissive for Grok videos + images
     pasteURL: {
       allowList: [
-        { hostname: 'grok.com', pathname: '/imagine/post/*' },
         { hostname: 'grok.com' },
+        { hostname: 'grok.com', pathname: '/imagine/post/*' },
         { hostname: 'imagine-public.x.ai' },
+        { hostname: 'imagine-public.x.ai', pathname: '/imagine-public/share-videos/*' },
+        { hostname: 'imagine-public.x.ai', pathname: '/imagine-public/share-images/*' },
         { hostname: 'images-public.x.ai' },
         { hostname: '*.x.ai' },
       ],
     },
+
+    // Also skip safe fetch check for these domains
+    skipSafeFetch: [
+      { hostname: 'grok.com' },
+      { hostname: 'imagine-public.x.ai' },
+      { hostname: 'images-public.x.ai' },
+      { hostname: '*.x.ai' },
+    ],
   },
   access: {
     read: () => true,
