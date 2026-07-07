@@ -20,8 +20,10 @@ export const Media: CollectionConfig = {
       return null
     },
 
-    // Temporary broad test - allows ANY URL
-    pasteURL: true,
+    // Test mode - allows all URLs (using proper object syntax)
+    pasteURL: {
+      allowList: [],   // empty = allow all for testing
+    },
   },
   access: {
     read: () => true,
