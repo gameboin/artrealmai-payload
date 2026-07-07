@@ -14,8 +14,10 @@ export const Media: CollectionConfig = {
       return null
     },
 
+    // Broad allowList optimized for Grok videos + images
     pasteURL: {
       allowList: [
+        { hostname: 'grok.com', pathname: '/imagine/post/*' },
         { hostname: 'grok.com' },
         { hostname: 'imagine-public.x.ai' },
         { hostname: 'images-public.x.ai' },
