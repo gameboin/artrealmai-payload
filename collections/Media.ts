@@ -13,7 +13,15 @@ export const Media: CollectionConfig = {
       }
       return null
     },
-    // pasteURL removed for now - falls back to default client-side
+
+    pasteURL: {
+      allowList: [
+        { hostname: 'grok.com' },
+        { hostname: 'imagine-public.x.ai' },
+        { hostname: 'images-public.x.ai' },
+        { hostname: '*.x.ai' },
+      ],
+    },
   },
   access: {
     read: () => true,
