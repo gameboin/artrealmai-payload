@@ -19,6 +19,21 @@ export const Media: CollectionConfig = {
       // This prevents the "Unknown Error" crash on weird video files.
       return null
     },
+
+    // pasteURL: Allows pasting Grok Imagine and other external URLs (server-side fetch)
+    pasteURL: {
+      allowList: [
+        {
+          hostname: 'imagine-public.x.ai',
+        },
+        {
+          hostname: 'images-public.x.ai',
+        },
+        {
+          hostname: 'grok.com',
+        },
+      ],
+    },
   },
   access: {
     read: () => true,
