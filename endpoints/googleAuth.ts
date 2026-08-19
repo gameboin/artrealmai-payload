@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto'
-import { getFieldsToSign, jwtSign, type Endpoint, type PayloadRequest } from 'payload'
+import { addDataAndFileToRequest, getFieldsToSign, jwtSign, type Endpoint, type PayloadRequest } from 'payload'
 
 function googleClientId() {
   return process.env.GOOGLE_CLIENT_ID || process.env.Google_Client_ID || ''
@@ -66,10 +66,9 @@ const postGoogleAuth: Endpoint = {
 
     let credential = ''
     try {
-      const body = await req.json()
-      credential = typeof (body as { credential?: unknown })?.credential === 'string'
-        ? (body as { credential: string }).credential.trim()
-        : ''
+      await addDataAndFileToRequest(req)
+      const raw = (req.data as { credential?: unknown } | undefined)?.credential
+      credential = typeof raw === 'string' ? raw.trim() : ''
     } catch {
       return Response.json({ message: 'Invalid request body.' }, { status: 400 })
     }
