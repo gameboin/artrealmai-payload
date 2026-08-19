@@ -20,6 +20,16 @@ export const Users: CollectionConfig = {
     { name: 'name', type: 'text', required: true },
     { name: 'avatar', type: 'upload', relationTo: 'media' },
     {
+      name: 'googleId',
+      type: 'text',
+      index: true,
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
+        description: 'Set automatically when the user signs in with Google.',
+      },
+    },
+    {
       name: 'roles',
       type: 'select',
       hasMany: true,

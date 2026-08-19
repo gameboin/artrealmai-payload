@@ -1,11 +1,16 @@
 // collections/Authors.ts
 import { CollectionConfig } from 'payload'
+import { applySlug } from '../lib/slug'
 
 export const Authors: CollectionConfig = {
   slug: 'authors',
   admin: {
     useAsTitle: 'name',
     defaultColumns: ['name', 'title', 'slug'],
+    preview: (doc) =>
+      typeof doc?.slug === 'string' && doc.slug
+        ? `https://artrealmai.com/author/${doc.slug}`
+        : null,
   },
   access: {
     read: () => true,
@@ -21,7 +26,10 @@ export const Authors: CollectionConfig = {
       required: true, 
       unique: true, 
       index: true,
-      admin: { position: 'sidebar' } 
+      admin: {
+        position: 'sidebar',
+        description: 'Public URL: artrealmai.com/author/this-slug. Auto-filled from the name if left blank.',
+      },
     },
     { name: 'title', type: 'text', label: 'Job Title' },
     { name: 'bio', type: 'textarea', label: 'Biography' },
@@ -37,6 +45,11 @@ export const Authors: CollectionConfig = {
       ],
     },
   ],
+  hooks: {
+    beforeValidate: [
+      ({ data }) => applySlug(data),
+    ],
+  },
 }
 
 export default Authors

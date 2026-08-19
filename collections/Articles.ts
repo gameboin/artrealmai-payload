@@ -1,12 +1,17 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
 import { CodeBlock } from '../blocks/CodeBlock'
+import { applySlug } from '../lib/slug'
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
   admin: {
     useAsTitle: 'title',
     defaultColumns: ['title', 'author', 'publishedDate', 'status'],
+    preview: (doc) =>
+      typeof doc?.slug === 'string' && doc.slug
+        ? `https://artrealmai.com/article/${doc.slug}`
+        : null,
   },
   access: {
     read: () => true,
@@ -36,8 +41,34 @@ export const Articles: CollectionConfig = {
         description: 'WARNING: This overwrites existing content!',
       },
     },
-    { name: 'slug', type: 'text', unique: true, required: true, index: true, admin: { position: 'sidebar' } },
-    { name: 'excerpt', type: 'textarea', admin: { description: 'Short teaser for homepage' } },
+    {
+      name: 'slug',
+      type: 'text',
+      unique: true,
+      required: true,
+      index: true,
+      admin: {
+        position: 'sidebar',
+        description: 'Public URL: artrealmai.com/article/this-slug. Auto-filled from the title if left blank.',
+      },
+    },
+    { name: 'excerpt', type: 'textarea', admin: { description: 'Short teaser for homepage and the default SEO description' } },
+    {
+      name: 'metaTitle',
+      type: 'text',
+      admin: {
+        position: 'sidebar',
+        description: 'Optional SEO title. Leave blank to use the article title.',
+      },
+    },
+    {
+      name: 'metaDescription',
+      type: 'textarea',
+      admin: {
+        position: 'sidebar',
+        description: 'Optional SEO/social description (~150–160 characters). Leave blank to use the excerpt.',
+      },
+    },
     { name: 'content', type: 'richText', required: true },
     { name: 'featuredImage', type: 'upload', relationTo: 'media', required: true },
     { name: 'author', type: 'relationship', relationTo: 'authors', admin: { position: 'sidebar' } },
@@ -51,6 +82,9 @@ export const Articles: CollectionConfig = {
     },
   ],
   hooks: {
+    beforeValidate: [
+      ({ data }) => applySlug(data),
+    ],
     beforeChange: [
       async ({ data, req }) => {
         if (data.markdownImport && data.doImport) {

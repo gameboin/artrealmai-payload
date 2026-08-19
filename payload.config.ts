@@ -13,7 +13,8 @@ import { s3Storage } from '@payloadcms/storage-s3'
 
 import { collections } from './collections' 
 import { GlossaryImporter } from './globals/GlossaryImporter'
-import { CodeBlock } from './blocks/CodeBlock' 
+import { CodeBlock } from './blocks/CodeBlock'
+import { googleAuthEndpoints } from './endpoints/googleAuth' 
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -24,7 +25,8 @@ export default buildConfig({
     importMap: { baseDir: path.resolve(dirname) },
   },
 
-  collections: collections, 
+  collections: collections,
+  endpoints: googleAuthEndpoints, 
 
   globals: [
     GlossaryImporter,
@@ -52,8 +54,10 @@ export default buildConfig({
     'https://artrealmai.com',
     'https://www.artrealmai.com',
     'http://localhost:3000',
-    'http://localhost:5500', 
+    'http://localhost:5500',
     'http://127.0.0.1:5500',
+    'http://127.0.0.1:8080',
+    'http://localhost:8080',
     // Allow Vercel URLs automatically
     process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '',
     process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '',
@@ -65,6 +69,8 @@ export default buildConfig({
     'http://localhost:3000',
     'http://localhost:5500',
     'http://127.0.0.1:5500',
+    'http://127.0.0.1:8080',
+    'http://localhost:8080',
     'https://artrealmai-payload.onrender.com',
     // Allow Vercel URLs automatically
     process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '',
