@@ -36,7 +36,21 @@ async function verifyGoogleCredential(credential: string, clientId: string): Pro
   return info
 }
 
-function publicUser(user: Record<string, unknown>) {
+type AuthUser = {
+  id: string
+  email: string
+  name?: string | null
+  avatar?: unknown
+  roles?: unknown
+  googleId?: string | null
+  sessions?: {
+    id: string
+    createdAt?: string | null
+    expiresAt: string
+  }[] | null
+}
+
+function publicUser(user: AuthUser) {
   return {
     id: user.id,
     email: user.email,
@@ -93,7 +107,7 @@ const postGoogleAuth: Endpoint = {
         },
       })
 
-      let user = existing.docs[0] as Record<string, unknown> | undefined
+      let user = existing.docs[0] as unknown as AuthUser | undefined
 
       if (!user) {
         user = (await payload.create({
@@ -106,16 +120,16 @@ const postGoogleAuth: Endpoint = {
             googleId: info.sub,
             password: randomBytes(32).toString('hex'),
             roles: ['user'],
-          },
-        })) as unknown as Record<string, unknown>
+          } as never,
+        })) as unknown as AuthUser
       } else if (!user.googleId) {
         user = (await payload.update({
           collection: 'users',
-          id: String(user.id),
+          id: user.id,
           overrideAccess: true,
           depth: 1,
-          data: { googleId: info.sub },
-        })) as unknown as Record<string, unknown>
+          data: { googleId: info.sub } as never,
+        })) as unknown as AuthUser
       }
 
       const collectionConfig = payload.collections.users.config
@@ -134,16 +148,16 @@ const postGoogleAuth: Endpoint = {
 
       await payload.update({
         collection: 'users',
-        id: String(user.id),
+        id: user.id,
         overrideAccess: true,
-        data: { sessions },
+        data: { sessions } as never,
       })
 
       const fieldsToSign = getFieldsToSign({
         collectionConfig,
         email,
         sid,
-        user,
+        user: user as unknown as PayloadRequest['user'],
       })
 
       const { token, exp } = await jwtSign({
