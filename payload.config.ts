@@ -14,7 +14,9 @@ import { s3Storage } from '@payloadcms/storage-s3'
 import { collections } from './collections' 
 import { GlossaryImporter } from './globals/GlossaryImporter'
 import { CodeBlock } from './blocks/CodeBlock'
-import { googleAuthEndpoints } from './endpoints/googleAuth' 
+import { DownloadBlock } from './blocks/DownloadBlock'
+import { googleAuthEndpoints } from './endpoints/googleAuth'
+import { fileDownloadEndpoint } from './endpoints/fileDownload' 
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -26,7 +28,7 @@ export default buildConfig({
   },
 
   collections: collections,
-  endpoints: googleAuthEndpoints, 
+  endpoints: [...googleAuthEndpoints, fileDownloadEndpoint], 
 
   globals: [
     GlossaryImporter,
@@ -40,13 +42,13 @@ export default buildConfig({
       
       // REGISTER CUSTOM BLOCK
       BlocksFeature({
-        blocks: [CodeBlock],
+        blocks: [CodeBlock, DownloadBlock],
       }),
     ],
   }),
 
   secret: process.env.PAYLOAD_SECRET || 'fallback-secret',
-  typescript: { outputFile: path.resolve(dirname, 'payload-types.ts') },
+  typescript: { outputFile: path.resolve(dirname, 'src/payload-types.ts') },
   db: mongooseAdapter({ url: process.env.DATABASE_URI || '' }),
   sharp,
 
@@ -83,6 +85,11 @@ export default buildConfig({
         media: {
           generateFileURL: ({ filename }) =>
             `https://${process.env.R2_PUBLIC_ACCESS_DOMAIN}/${filename}`,
+        },
+        files: {
+          prefix: 'downloads',
+          generateFileURL: ({ filename }) =>
+            `https://${process.env.R2_PUBLIC_ACCESS_DOMAIN}/downloads/${filename}`,
         },
       },
       bucket: process.env.R2_BUCKET!,

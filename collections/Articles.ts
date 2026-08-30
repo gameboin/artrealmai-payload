@@ -1,6 +1,7 @@
 import { CollectionConfig } from 'payload'
 import { marked } from 'marked'
 import { CodeBlock } from '../blocks/CodeBlock'
+import { DownloadBlock } from '../blocks/DownloadBlock'
 import { applySlug } from '../lib/slug'
 
 export const Articles: CollectionConfig = {
@@ -153,7 +154,7 @@ export const Articles: CollectionConfig = {
             const rawConfig = {
               features: [
                 ...defaultEditorFeatures,
-                BlocksFeature({ blocks: [CodeBlock] }),
+                BlocksFeature({ blocks: [CodeBlock, DownloadBlock] }),
               ]
             };
             const sanitizedConfig = await sanitizeServerEditorConfig(rawConfig, req.payload.config);

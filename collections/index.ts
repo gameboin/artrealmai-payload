@@ -1,5 +1,6 @@
 import { Users } from './Users'
 import { Media } from './Media'
+import { Files } from './Files'
 import { Articles } from './Articles'
 import { Tags } from './Tags'
 import { Authors } from './Authors'
@@ -12,6 +13,7 @@ import { ContactSubmissions } from './ContactSubmissions'
 export const collections = [
   Users,
   Media,
+  Files,
   Articles,
   Tags,
   Authors,

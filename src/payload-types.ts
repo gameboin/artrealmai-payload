@@ -69,9 +69,14 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
-    authors: Author;
+    files: File;
     articles: Article;
     tags: Tag;
+    authors: Author;
+    'glossary-terms': GlossaryTerm;
+    'prompt-styles': PromptStyle;
+    'saved-prompts': SavedPrompt;
+    'contact-submissions': ContactSubmission;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -81,9 +86,14 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
-    authors: AuthorsSelect<false> | AuthorsSelect<true>;
+    files: FilesSelect<false> | FilesSelect<true>;
     articles: ArticlesSelect<false> | ArticlesSelect<true>;
     tags: TagsSelect<false> | TagsSelect<true>;
+    authors: AuthorsSelect<false> | AuthorsSelect<true>;
+    'glossary-terms': GlossaryTermsSelect<false> | GlossaryTermsSelect<true>;
+    'prompt-styles': PromptStylesSelect<false> | PromptStylesSelect<true>;
+    'saved-prompts': SavedPromptsSelect<false> | SavedPromptsSelect<true>;
+    'contact-submissions': ContactSubmissionsSelect<false> | ContactSubmissionsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -92,8 +102,12 @@ export interface Config {
   db: {
     defaultIDType: string;
   };
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    'glossary-importer': GlossaryImporter;
+  };
+  globalsSelect: {
+    'glossary-importer': GlossaryImporterSelect<false> | GlossaryImporterSelect<true>;
+  };
   locale: null;
   user: User & {
     collection: 'users';
@@ -127,6 +141,13 @@ export interface UserAuthOperations {
  */
 export interface User {
   id: string;
+  name: string;
+  avatar?: (string | null) | Media;
+  /**
+   * Set automatically when the user signs in with Google.
+   */
+  googleId?: string | null;
+  roles?: ('user' | 'admin')[] | null;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -151,7 +172,7 @@ export interface User {
  */
 export interface Media {
   id: string;
-  alt: string;
+  alt?: string | null;
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -165,15 +186,27 @@ export interface Media {
   focalY?: number | null;
 }
 /**
+ * Any file type for article downloads (JSON, ZIP, PDF, etc.). Use the File Download block in an article to attach one.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "authors".
+ * via the `definition` "files".
  */
-export interface Author {
+export interface File {
   id: string;
-  name: string;
-  portrait?: (string | null) | Media;
+  /**
+   * Optional display name on the download card. Defaults to the filename.
+   */
+  label?: string | null;
+  prefix?: string | null;
   updatedAt: string;
   createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -182,11 +215,30 @@ export interface Author {
 export interface Article {
   id: string;
   title: string;
+  /**
+   * Paste raw markdown here. The system will auto-clean wrapping tags.
+   */
+  markdownImport?: string | null;
+  /**
+   * WARNING: This overwrites existing content!
+   */
+  doImport?: boolean | null;
+  /**
+   * Public URL: artrealmai.com/article/this-slug. Auto-filled from the title if left blank.
+   */
   slug: string;
   /**
-   * Short teaser for homepage
+   * Short teaser for homepage and the default SEO description
    */
   excerpt?: string | null;
+  /**
+   * Optional SEO title. Leave blank to use the article title.
+   */
+  metaTitle?: string | null;
+  /**
+   * Optional SEO/social description (~150–160 characters). Leave blank to use the excerpt.
+   */
+  metaDescription?: string | null;
   content: {
     root: {
       type: string;
@@ -211,12 +263,126 @@ export interface Article {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "authors".
+ */
+export interface Author {
+  id: string;
+  name: string;
+  /**
+   * Public URL: artrealmai.com/author/this-slug. Auto-filled from the name if left blank.
+   */
+  slug: string;
+  title?: string | null;
+  bio?: string | null;
+  portrait: string | Media;
+  socials?: {
+    twitter?: string | null;
+    linkedin?: string | null;
+    website?: string | null;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "tags".
  */
 export interface Tag {
   id: string;
   name: string;
   slug: string;
+  order: number;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "glossary-terms".
+ */
+export interface GlossaryTerm {
+  id: string;
+  term: string;
+  definition: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Manage prompt style categories. Paste multiple terms at once!
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "prompt-styles".
+ */
+export interface PromptStyle {
+  id: string;
+  category:
+    | 'image-styles'
+    | 'subject'
+    | 'lighting'
+    | 'camera'
+    | 'composition'
+    | 'poses'
+    | 'expressions'
+    | 'hairstyles'
+    | 'tops'
+    | 'necklines'
+    | 'bottoms'
+    | 'bodysuits'
+    | 'clothing-textures'
+    | 'metal-textures'
+    | 'footwear'
+    | 'accessories'
+    | 'makeup'
+    | 'skin-details'
+    | 'backgrounds'
+    | 'mood-atmosphere'
+    | 'art-movements';
+  /**
+   * Paste multiple terms: elegant pose, sultry expression, lace bodysuit...
+   */
+  bulkTerms?: string | null;
+  terms: {
+    text: string;
+    id?: string | null;
+  }[];
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "saved-prompts".
+ */
+export interface SavedPrompt {
+  id: string;
+  title: string;
+  prompt: string;
+  user: string | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-submissions".
+ */
+export interface ContactSubmission {
+  id: string;
+  topic: 'Advertising' | 'Collaboration' | 'Bug Report' | 'General';
+  name: string;
+  email: string;
+  message: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -253,8 +419,8 @@ export interface PayloadLockedDocument {
         value: string | Media;
       } | null)
     | ({
-        relationTo: 'authors';
-        value: string | Author;
+        relationTo: 'files';
+        value: string | File;
       } | null)
     | ({
         relationTo: 'articles';
@@ -263,6 +429,26 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'tags';
         value: string | Tag;
+      } | null)
+    | ({
+        relationTo: 'authors';
+        value: string | Author;
+      } | null)
+    | ({
+        relationTo: 'glossary-terms';
+        value: string | GlossaryTerm;
+      } | null)
+    | ({
+        relationTo: 'prompt-styles';
+        value: string | PromptStyle;
+      } | null)
+    | ({
+        relationTo: 'saved-prompts';
+        value: string | SavedPrompt;
+      } | null)
+    | ({
+        relationTo: 'contact-submissions';
+        value: string | ContactSubmission;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -311,6 +497,10 @@ export interface PayloadMigration {
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  name?: T;
+  avatar?: T;
+  googleId?: T;
+  roles?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -348,13 +538,20 @@ export interface MediaSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "authors_select".
+ * via the `definition` "files_select".
  */
-export interface AuthorsSelect<T extends boolean = true> {
-  name?: T;
-  portrait?: T;
+export interface FilesSelect<T extends boolean = true> {
+  label?: T;
+  prefix?: T;
   updatedAt?: T;
   createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -362,8 +559,12 @@ export interface AuthorsSelect<T extends boolean = true> {
  */
 export interface ArticlesSelect<T extends boolean = true> {
   title?: T;
+  markdownImport?: T;
+  doImport?: T;
   slug?: T;
   excerpt?: T;
+  metaTitle?: T;
+  metaDescription?: T;
   content?: T;
   featuredImage?: T;
   author?: T;
@@ -379,6 +580,76 @@ export interface ArticlesSelect<T extends boolean = true> {
 export interface TagsSelect<T extends boolean = true> {
   name?: T;
   slug?: T;
+  order?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "authors_select".
+ */
+export interface AuthorsSelect<T extends boolean = true> {
+  name?: T;
+  slug?: T;
+  title?: T;
+  bio?: T;
+  portrait?: T;
+  socials?:
+    | T
+    | {
+        twitter?: T;
+        linkedin?: T;
+        website?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "glossary-terms_select".
+ */
+export interface GlossaryTermsSelect<T extends boolean = true> {
+  term?: T;
+  definition?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "prompt-styles_select".
+ */
+export interface PromptStylesSelect<T extends boolean = true> {
+  category?: T;
+  bulkTerms?: T;
+  terms?:
+    | T
+    | {
+        text?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "saved-prompts_select".
+ */
+export interface SavedPromptsSelect<T extends boolean = true> {
+  title?: T;
+  prompt?: T;
+  user?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "contact-submissions_select".
+ */
+export interface ContactSubmissionsSelect<T extends boolean = true> {
+  topic?: T;
+  name?: T;
+  email?: T;
+  message?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -421,6 +692,46 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "glossary-importer".
+ */
+export interface GlossaryImporter {
+  id: string;
+  /**
+   * Paste terms below. Format: "Term: Definition". One per line.
+   */
+  bulkInput?: string | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "glossary-importer_select".
+ */
+export interface GlossaryImporterSelect<T extends boolean = true> {
+  bulkInput?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "DownloadBlock".
+ */
+export interface DownloadBlock {
+  /**
+   * Upload any file (JSON, ZIP, PDF, etc.) for readers to download in one click.
+   */
+  file: string | File;
+  /**
+   * Optional card title. Defaults to the file name.
+   */
+  title?: string | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'download';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
