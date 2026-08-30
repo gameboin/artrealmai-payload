@@ -18,6 +18,7 @@ export const Code: Block = {
         { label: 'Python', value: 'python' },
         { label: 'HTML', value: 'html' },
         { label: 'CSS', value: 'css' },
+        { label: 'JSON', value: 'json' },
         { label: 'Plain Text', value: 'plaintext' },
       ],
       admin: {

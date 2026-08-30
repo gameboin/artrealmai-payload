@@ -105,10 +105,33 @@ export const Articles: CollectionConfig = {
             const codeBlocks: any[] = [];
             const blockRegex = /```(\w*)\n([\s\S]*?)```/g;
             
+            const languageAliases: Record<string, string> = {
+                bash: 'bash',
+                sh: 'bash',
+                shell: 'bash',
+                zsh: 'bash',
+                javascript: 'javascript',
+                js: 'javascript',
+                typescript: 'typescript',
+                ts: 'typescript',
+                python: 'python',
+                py: 'python',
+                html: 'html',
+                css: 'css',
+                json: 'json',
+                jsonc: 'json',
+                plaintext: 'plaintext',
+                text: 'plaintext',
+                txt: 'plaintext',
+            };
+            const allowedLanguages = new Set(Object.values(languageAliases));
+
             const processedMarkdown = cleanMarkdown.replace(blockRegex, (_match: string, lang: string, code: string) => {
                 const index = codeBlocks.length;
+                const rawLang = (lang || 'plaintext').toLowerCase();
+                const normalizedLang = languageAliases[rawLang] || (allowedLanguages.has(rawLang) ? rawLang : 'plaintext');
                 codeBlocks.push({
-                    lang: lang || 'plaintext',
+                    lang: normalizedLang,
                     code: code.trim()
                 });
                 return `[[[CODE_BLOCK_${index}]]]`; // No underscores in the ID part to be safe
