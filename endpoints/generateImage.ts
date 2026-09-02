@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 
 const DAILY_LIMIT = 4
@@ -52,6 +52,32 @@ async function persistToR2(buffer: Buffer, filename: string, contentType: string
     }),
   )
   return `https://${domain}/${key}`
+}
+
+async function deleteFromR2(url: string) {
+  const client = r2Client()
+  const bucket = process.env.R2_BUCKET
+  const domain = process.env.R2_PUBLIC_ACCESS_DOMAIN
+  if (!client || !bucket || !domain || !url.includes(`${domain}/`)) return
+  const marker = `${domain}/`
+  const idx = url.indexOf(marker)
+  if (idx === -1) return
+  const key = decodeURIComponent(url.slice(idx + marker.length).split('?')[0] || '')
+  if (!key.startsWith('gens/')) return
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+  } catch {
+    // Record removal still proceeds if the object is already gone.
+  }
+}
+
+function ownerIdOf(user: string | { id?: string } | null | undefined) {
+  if (!user) return ''
+  return typeof user === 'string' ? user : String(user.id || '')
+}
+
+function isAdminUser(user: { roles?: string[] } | null | undefined) {
+  return Array.isArray(user?.roles) && user.roles.includes('admin')
 }
 
 async function usedToday(req: PayloadRequest, userId: string) {
@@ -164,6 +190,45 @@ export const genFileEndpoint: Endpoint = {
           'Cache-Control': 'private, max-age=3600',
         },
       })
+    } catch {
+      return Response.json({ message: 'Image not found' }, { status: 404 })
+    }
+  },
+}
+
+export const genDeleteEndpoint: Endpoint = {
+  path: '/gen/file/:id',
+  method: 'delete',
+  handler: async (req: PayloadRequest) => {
+    if (!req.user) {
+      return Response.json({ message: 'Sign in to delete.' }, { status: 401 })
+    }
+    const params = req.routeParams as { id?: unknown } | undefined
+    const id = typeof params?.id === 'string' ? params.id : ''
+    if (!id) {
+      return Response.json({ message: 'Missing image id' }, { status: 400 })
+    }
+
+    try {
+      const doc = (await req.payload.findByID({
+        collection: 'generations' as never,
+        id,
+        depth: 0,
+        overrideAccess: true,
+      })) as { url?: string; user?: string | { id?: string } }
+
+      const ownerId = ownerIdOf(doc.user)
+      if (!isAdminUser(req.user as { roles?: string[] }) && ownerId !== String(req.user.id)) {
+        return Response.json({ message: 'Image not found' }, { status: 404 })
+      }
+
+      if (doc.url) await deleteFromR2(doc.url)
+      await req.payload.delete({
+        collection: 'generations' as never,
+        id,
+        overrideAccess: true,
+      })
+      return Response.json({ ok: true, id })
     } catch {
       return Response.json({ message: 'Image not found' }, { status: 404 })
     }
@@ -307,4 +372,10 @@ export const genImageEndpoint: Endpoint = {
   },
 }
 
-export const generateImageEndpoints: Endpoint[] = [genStatusEndpoint, genListEndpoint, genFileEndpoint, genImageEndpoint]
+export const generateImageEndpoints: Endpoint[] = [
+  genStatusEndpoint,
+  genListEndpoint,
+  genFileEndpoint,
+  genDeleteEndpoint,
+  genImageEndpoint,
+]
