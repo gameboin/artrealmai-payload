@@ -4,7 +4,7 @@ import Stripe from 'stripe'
 const PACKS_USD = [5, 15, 40, 100, 500]
 const MIN_CUSTOM_USD = 5
 const MAX_CUSTOM_USD = 1000
-const SITE_GEN_URL = 'https://artrealmai.com/gen'
+const SITE_GEN_URL = 'https://artrealmai.com/gen.html'
 
 function stripeClient() {
   const key = process.env.STRIPE_SECRET_KEY
