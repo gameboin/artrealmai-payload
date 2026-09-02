@@ -56,5 +56,15 @@ export const Users: CollectionConfig = {
       access: { update: () => false },
       admin: { hidden: true },
     },
+    {
+      name: 'genBalanceCents',
+      type: 'number',
+      defaultValue: 0,
+      access: { update: () => false },
+      admin: {
+        description: 'USD wallet in cents. Changed only by Stripe webhooks and paid gens.',
+        readOnly: true,
+      },
+    },
   ],
 }

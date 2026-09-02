@@ -2,6 +2,7 @@ import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 
 const DAILY_LIMIT = 4
+const PAID_SCHNELL_CENTS = 5
 const MODEL_ID = 'fal-ai/flux/schnell'
 const MODEL_LABEL = 'Flux Schnell'
 
@@ -36,6 +37,7 @@ type GenUser = {
   genFailStreak?: number | null
   genPenaltySlots?: number | null
   genPenaltyDay?: string | null
+  genBalanceCents?: number | null
 }
 
 function r2Client() {
@@ -159,15 +161,22 @@ export const genStatusEndpoint: Endpoint = {
     const userId = String(req.user.id)
     const used = await usedToday(req, userId)
     const genUser = await loadGenUser(req, userId)
+    const remaining = Math.max(0, DAILY_LIMIT - used)
+    const balanceCents = Number(genUser.genBalanceCents) || 0
     return Response.json({
       enabled: Boolean(process.env.FAL_KEY),
       model: MODEL_LABEL,
       modelId: MODEL_ID,
       dailyLimit: DAILY_LIMIT,
       used,
-      remaining: Math.max(0, DAILY_LIMIT - used),
+      remaining,
       failStreak: Number(genUser.genFailStreak) || 0,
       failsPerSlot: FAILS_PER_SLOT,
+      balanceCents,
+      priceCents: PAID_SCHNELL_CENTS,
+      stripeEnabled: Boolean(process.env.STRIPE_SECRET_KEY),
+      packs: [5, 15, 40, 100, 500],
+      canGenerate: remaining > 0 || balanceCents >= PAID_SCHNELL_CENTS,
     })
   },
 }
@@ -342,13 +351,19 @@ export const genImageEndpoint: Endpoint = {
 
     const userId = String(req.user.id)
     const used = await usedToday(req, userId)
-    if (used >= DAILY_LIMIT) {
+    const remainingFree = Math.max(0, DAILY_LIMIT - used)
+    const genUser = await loadGenUser(req, userId)
+    const balanceCents = Number(genUser.genBalanceCents) || 0
+    if (remainingFree < 1 && balanceCents < PAID_SCHNELL_CENTS) {
       return Response.json(
         {
-          message: `Daily preview limit reached (${DAILY_LIMIT} images). Credits come next.`,
+          message: `Daily free gens are used. Add funds to keep generating ($${ (PAID_SCHNELL_CENTS / 100).toFixed(2) } each).`,
           remaining: 0,
+          balanceCents,
+          priceCents: PAID_SCHNELL_CENTS,
+          needsFunds: true,
         },
-        { status: 429 },
+        { status: 402 },
       )
     }
 
@@ -389,7 +404,7 @@ export const genImageEndpoint: Endpoint = {
       const usedAfter = await usedToday(req, userId)
       const remaining = Math.max(0, DAILY_LIMIT - usedAfter)
       const policy =
-        'Every 3 blocked prompts in a row uses 1 free gen, to stop abuse and bots.'
+        'Every 3 blocked prompts uses 1 free gen, to stop abuse and bots.'
       const message = block.consumed
         ? `That prompt was blocked by the safety checker. ${policy} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 free gen. ${remaining} left today.`
         : `That prompt was blocked by the safety checker. ${policy} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
@@ -422,8 +437,6 @@ export const genImageEndpoint: Endpoint = {
       storedUrl = image.url
     }
 
-    await resetFailStreak(req, userId)
-
     const doc = (await req.payload.create({
       collection: 'generations' as never,
       overrideAccess: true,
@@ -439,12 +452,28 @@ export const genImageEndpoint: Endpoint = {
       } as never,
     })) as { id: string }
 
+    let chargedCents = 0
+    let nextBalance = balanceCents
+    if (remainingFree < 1) {
+      chargedCents = PAID_SCHNELL_CENTS
+      nextBalance = balanceCents - PAID_SCHNELL_CENTS
+      await req.payload.update({
+        collection: 'users',
+        id: userId,
+        overrideAccess: true,
+        data: { genBalanceCents: nextBalance } as never,
+      })
+    }
+
     return Response.json({
       id: doc.id,
       url: storedUrl,
       seed: typeof falJson?.seed === 'number' ? falJson.seed : seed,
       model: MODEL_LABEL,
-      remaining: Math.max(0, DAILY_LIMIT - used - 1),
+      remaining: Math.max(0, remainingFree - 1),
+      balanceCents: nextBalance,
+      chargedCents,
+      priceCents: PAID_SCHNELL_CENTS,
     })
   },
 }

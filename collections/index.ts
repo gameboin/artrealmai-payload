@@ -10,12 +10,14 @@ import { SavedPrompts } from './SavedPrompts'
 // 1. Import the new Contact Submissions collection
 import { ContactSubmissions } from './ContactSubmissions'
 import { Generations } from './Generations'
+import { GenPurchases } from './GenPurchases'
 
 export const collections = [
   Users,
   Media,
   Files,
   Generations,
+  GenPurchases,
   Articles,
   Tags,
   Authors,
