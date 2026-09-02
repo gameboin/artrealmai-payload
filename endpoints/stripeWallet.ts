@@ -91,6 +91,9 @@ export const genStripeWebhookEndpoint: Endpoint = {
     }
 
     const signature = req.headers.get('stripe-signature') || ''
+    if (typeof req.text !== 'function') {
+      return Response.json({ message: 'Missing body.' }, { status: 400 })
+    }
     let rawBody = ''
     try {
       rawBody = await req.text()
