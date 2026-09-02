@@ -1,5 +1,6 @@
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
+import { stripeCheckoutEnabled } from './stripeWallet'
 
 const DAILY_LIMIT = 4
 const PAID_SCHNELL_CENTS = 5
@@ -174,7 +175,7 @@ export const genStatusEndpoint: Endpoint = {
       failsPerSlot: FAILS_PER_SLOT,
       balanceCents,
       priceCents: PAID_SCHNELL_CENTS,
-      stripeEnabled: Boolean(process.env.STRIPE_SECRET_KEY),
+      stripeEnabled: stripeCheckoutEnabled(),
       packs: [5, 15, 40, 100, 500],
       canGenerate: remaining > 0 || balanceCents >= PAID_SCHNELL_CENTS,
     })

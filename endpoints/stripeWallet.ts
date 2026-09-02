@@ -13,6 +13,14 @@ function stripeClient() {
   return new Stripe(key)
 }
 
+/** Live keys always. Test keys only off Vercel production, so visitors never hit Stripe test checkout. */
+export function stripeCheckoutEnabled() {
+  const key = process.env.STRIPE_SECRET_KEY || ''
+  if (key.startsWith('sk_live_')) return true
+  if (!key.startsWith('sk_test_')) return false
+  return process.env.VERCEL_ENV !== 'production'
+}
+
 function dollarsToCents(amount: unknown) {
   const n = typeof amount === 'number' ? amount : Number(amount)
   if (!Number.isFinite(n)) return null
@@ -27,6 +35,9 @@ export const genCheckoutEndpoint: Endpoint = {
   handler: async (req: PayloadRequest) => {
     if (!req.user) {
       return Response.json({ message: 'Sign in to add funds.' }, { status: 401 })
+    }
+    if (!stripeCheckoutEnabled()) {
+      return Response.json({ message: 'Payments are not connected yet.' }, { status: 503 })
     }
     const stripe = stripeClient()
     if (!stripe) {
