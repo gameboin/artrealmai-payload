@@ -1,7 +1,7 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 
-const DAILY_LIMIT = 8
+const DAILY_LIMIT = 4
 const MODEL_ID = 'fal-ai/flux/schnell'
 const MODEL_LABEL = 'Flux Schnell'
 
@@ -121,6 +121,52 @@ export const genListEndpoint: Endpoint = {
         }
       }),
     })
+  },
+}
+
+export const genFileEndpoint: Endpoint = {
+  path: '/gen/file/:id',
+  method: 'get',
+  handler: async (req: PayloadRequest) => {
+    if (!req.user) {
+      return Response.json({ message: 'Sign in to download.' }, { status: 401 })
+    }
+    const params = req.routeParams as { id?: unknown } | undefined
+    const id = typeof params?.id === 'string' ? params.id : ''
+    if (!id) {
+      return Response.json({ message: 'Missing image id' }, { status: 400 })
+    }
+
+    try {
+      const doc = (await req.payload.findByID({
+        collection: 'generations' as never,
+        id,
+        depth: 0,
+        overrideAccess: true,
+      })) as { url?: string; user?: string | { id?: string } }
+
+      const ownerId = typeof doc.user === 'string' ? doc.user : doc.user?.id
+      const isAdmin = Array.isArray((req.user as { roles?: string[] }).roles)
+        && (req.user as { roles?: string[] }).roles?.includes('admin')
+      if (!doc?.url || (!isAdmin && ownerId !== String(req.user.id))) {
+        return Response.json({ message: 'Image not found' }, { status: 404 })
+      }
+
+      const upstream = await fetch(doc.url)
+      if (!upstream.ok || !upstream.body) {
+        return Response.redirect(doc.url, 302)
+      }
+
+      return new Response(upstream.body, {
+        headers: {
+          'Content-Type': upstream.headers.get('content-type') || 'image/jpeg',
+          'Content-Disposition': 'attachment; filename="artrealmai-gen.jpg"',
+          'Cache-Control': 'private, max-age=3600',
+        },
+      })
+    } catch {
+      return Response.json({ message: 'Image not found' }, { status: 404 })
+    }
   },
 }
 
@@ -261,4 +307,4 @@ export const genImageEndpoint: Endpoint = {
   },
 }
 
-export const generateImageEndpoints: Endpoint[] = [genStatusEndpoint, genListEndpoint, genImageEndpoint]
+export const generateImageEndpoints: Endpoint[] = [genStatusEndpoint, genListEndpoint, genFileEndpoint, genImageEndpoint]
