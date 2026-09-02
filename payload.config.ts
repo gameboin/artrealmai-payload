@@ -16,7 +16,8 @@ import { GlossaryImporter } from './globals/GlossaryImporter'
 import { CodeBlock } from './blocks/CodeBlock'
 import { DownloadBlock } from './blocks/DownloadBlock'
 import { googleAuthEndpoints } from './endpoints/googleAuth'
-import { fileDownloadEndpoint } from './endpoints/fileDownload' 
+import { fileDownloadEndpoint } from './endpoints/fileDownload'
+import { generateImageEndpoints } from './endpoints/generateImage' 
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -28,7 +29,7 @@ export default buildConfig({
   },
 
   collections: collections,
-  endpoints: [...googleAuthEndpoints, fileDownloadEndpoint], 
+  endpoints: [...googleAuthEndpoints, fileDownloadEndpoint, ...generateImageEndpoints], 
 
   globals: [
     GlossaryImporter,
