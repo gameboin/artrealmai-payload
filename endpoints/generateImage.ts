@@ -126,15 +126,6 @@ async function usedToday(req: PayloadRequest, userId: string) {
   return gens + penaltySlotsForToday(user)
 }
 
-async function resetFailStreak(req: PayloadRequest, userId: string) {
-  await req.payload.update({
-    collection: 'users',
-    id: userId,
-    overrideAccess: true,
-    data: { genFailStreak: 0 } as never,
-  })
-}
-
 async function recordBlockedGen(req: PayloadRequest, userId: string) {
   const user = await loadGenUser(req, userId)
   const day = utcDayKey()
