@@ -36,5 +36,25 @@ export const Users: CollectionConfig = {
       defaultValue: ['user'],
       options: ['user', 'admin'],
     },
+    {
+      name: 'genFailStreak',
+      type: 'number',
+      defaultValue: 0,
+      access: { update: () => false },
+      admin: { hidden: true },
+    },
+    {
+      name: 'genPenaltySlots',
+      type: 'number',
+      defaultValue: 0,
+      access: { update: () => false },
+      admin: { hidden: true },
+    },
+    {
+      name: 'genPenaltyDay',
+      type: 'text',
+      access: { update: () => false },
+      admin: { hidden: true },
+    },
   ],
 }

@@ -20,9 +20,22 @@ type FalImage = {
   height?: number
 }
 
+const FAILS_PER_SLOT = 3
+
 function startOfUtcDay() {
   const now = new Date()
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+}
+
+function utcDayKey() {
+  return startOfUtcDay().toISOString().slice(0, 10)
+}
+
+type GenUser = {
+  id: string
+  genFailStreak?: number | null
+  genPenaltySlots?: number | null
+  genPenaltyDay?: string | null
 }
 
 function r2Client() {
@@ -80,7 +93,7 @@ function isAdminUser(user: { roles?: string[] } | null | undefined) {
   return Array.isArray(user?.roles) && user.roles.includes('admin')
 }
 
-async function usedToday(req: PayloadRequest, userId: string) {
+async function gensToday(req: PayloadRequest, userId: string) {
   const result = await req.payload.find({
     collection: 'generations' as never,
     overrideAccess: true,
@@ -92,6 +105,59 @@ async function usedToday(req: PayloadRequest, userId: string) {
   return result.totalDocs
 }
 
+async function loadGenUser(req: PayloadRequest, userId: string) {
+  return (await req.payload.findByID({
+    collection: 'users',
+    id: userId,
+    depth: 0,
+    overrideAccess: true,
+  })) as GenUser
+}
+
+function penaltySlotsForToday(user: GenUser) {
+  const day = utcDayKey()
+  if (user.genPenaltyDay !== day) return 0
+  return Number(user.genPenaltySlots) || 0
+}
+
+async function usedToday(req: PayloadRequest, userId: string) {
+  const user = await loadGenUser(req, userId)
+  const gens = await gensToday(req, userId)
+  return gens + penaltySlotsForToday(user)
+}
+
+async function resetFailStreak(req: PayloadRequest, userId: string) {
+  await req.payload.update({
+    collection: 'users',
+    id: userId,
+    overrideAccess: true,
+    data: { genFailStreak: 0 } as never,
+  })
+}
+
+async function recordBlockedGen(req: PayloadRequest, userId: string) {
+  const user = await loadGenUser(req, userId)
+  const day = utcDayKey()
+  const penalties = penaltySlotsForToday(user)
+  const nextStreak = (Number(user.genFailStreak) || 0) + 1
+  const consumed = nextStreak >= FAILS_PER_SLOT
+  const streak = consumed ? 0 : nextStreak
+  const nextPenalties = penalties + (consumed ? 1 : 0)
+
+  await req.payload.update({
+    collection: 'users',
+    id: userId,
+    overrideAccess: true,
+    data: {
+      genFailStreak: streak,
+      genPenaltySlots: nextPenalties,
+      genPenaltyDay: day,
+    } as never,
+  })
+
+  return { streak, consumed, penalties: nextPenalties }
+}
+
 export const genStatusEndpoint: Endpoint = {
   path: '/gen/status',
   method: 'get',
@@ -99,7 +165,9 @@ export const genStatusEndpoint: Endpoint = {
     if (!req.user) {
       return Response.json({ message: 'Sign in to generate.' }, { status: 401 })
     }
-    const used = await usedToday(req, String(req.user.id))
+    const userId = String(req.user.id)
+    const used = await usedToday(req, userId)
+    const genUser = await loadGenUser(req, userId)
     return Response.json({
       enabled: Boolean(process.env.FAL_KEY),
       model: MODEL_LABEL,
@@ -107,6 +175,8 @@ export const genStatusEndpoint: Endpoint = {
       dailyLimit: DAILY_LIMIT,
       used,
       remaining: Math.max(0, DAILY_LIMIT - used),
+      failStreak: Number(genUser.genFailStreak) || 0,
+      failsPerSlot: FAILS_PER_SLOT,
     })
   },
 }
@@ -324,8 +394,22 @@ export const genImageEndpoint: Endpoint = {
     }
 
     if (falJson?.has_nsfw_concepts?.[0]) {
+      const block = await recordBlockedGen(req, userId)
+      const usedAfter = await usedToday(req, userId)
+      const remaining = Math.max(0, DAILY_LIMIT - usedAfter)
+      const policy =
+        'Every 3 blocked prompts in a row uses 1 free gen, to stop abuse and bots.'
+      const message = block.consumed
+        ? `That prompt was blocked by the safety checker. ${policy} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 free gen. ${remaining} left today.`
+        : `That prompt was blocked by the safety checker. ${policy} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
       return Response.json(
-        { message: 'That prompt was blocked by the safety checker. Try a different description.' },
+        {
+          message,
+          remaining,
+          failStreak: block.streak,
+          failsPerSlot: FAILS_PER_SLOT,
+          slotConsumed: block.consumed,
+        },
         { status: 422 },
       )
     }
@@ -346,6 +430,8 @@ export const genImageEndpoint: Endpoint = {
     } catch {
       storedUrl = image.url
     }
+
+    await resetFailStreak(req, userId)
 
     const doc = (await req.payload.create({
       collection: 'generations' as never,
