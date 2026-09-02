@@ -5,6 +5,7 @@ const PACKS_USD = [5, 15, 40, 100, 500]
 const MIN_CUSTOM_USD = 5
 const MAX_CUSTOM_USD = 1000
 const SITE_GEN_URL = 'https://artrealmai.com/gen.html'
+const SITE_ACCOUNT_URL = 'https://artrealmai.com/account.html'
 
 function stripeClient() {
   const key = process.env.STRIPE_SECRET_KEY
@@ -38,7 +39,7 @@ export const genCheckoutEndpoint: Endpoint = {
       return Response.json({ message: 'Invalid request body.' }, { status: 400 })
     }
 
-    const body = (req.data || {}) as { amount?: unknown }
+    const body = (req.data || {}) as { amount?: unknown; returnTo?: unknown }
     const cents = dollarsToCents(body.amount)
     if (cents == null) {
       return Response.json(
@@ -69,8 +70,8 @@ export const genCheckoutEndpoint: Endpoint = {
           },
         },
       ],
-      success_url: `${SITE_GEN_URL}?paid=1`,
-      cancel_url: SITE_GEN_URL,
+      success_url: body.returnTo === 'account' ? `${SITE_ACCOUNT_URL}?paid=1` : `${SITE_GEN_URL}?paid=1`,
+      cancel_url: body.returnTo === 'account' ? SITE_ACCOUNT_URL : SITE_GEN_URL,
     })
 
     if (!session.url) {
