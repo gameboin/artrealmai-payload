@@ -442,8 +442,8 @@ export const genImageEndpoint: Endpoint = {
     if (prompt.length < 3) {
       return Response.json({ message: 'Write a prompt of at least a few words.' }, { status: 400 })
     }
-    if (prompt.length > 2000) {
-      return Response.json({ message: 'Prompt is too long (max 2000 characters).' }, { status: 400 })
+    if (prompt.length > 20000) {
+      return Response.json({ message: 'Prompt is too long (max 20,000 characters).' }, { status: 400 })
     }
 
     const model = resolveModel(body.model)
