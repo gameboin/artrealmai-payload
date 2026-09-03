@@ -3,18 +3,119 @@ import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'pay
 import { stripeCheckoutEnabled } from './stripeWallet'
 
 const DAILY_LIMIT = 4
-const PAID_SCHNELL_CENTS = 5
-const MODEL_ID = 'fal-ai/flux/schnell'
-const MODEL_LABEL = 'Flux Schnell'
 
-const IMAGE_SIZES = new Set([
-  'square_hd',
-  'square',
-  'portrait_4_3',
-  'portrait_16_9',
-  'landscape_4_3',
-  'landscape_16_9',
-])
+type ModelKey = 'schnell' | 'banana2' | 'krea2'
+
+type GenModel = {
+  key: ModelKey
+  falId: string
+  label: string
+  blurb: string
+  priceCents: number
+  free: boolean
+}
+
+const MODELS: Record<ModelKey, GenModel> = {
+  schnell: {
+    key: 'schnell',
+    falId: 'fal-ai/flux/schnell',
+    label: 'Flux Schnell',
+    blurb: 'Fast preview',
+    priceCents: 5,
+    free: true,
+  },
+  banana2: {
+    key: 'banana2',
+    falId: 'fal-ai/nano-banana-2',
+    label: 'Nano Banana 2',
+    blurb: 'Gemini · sharp text',
+    priceCents: 15,
+    free: false,
+  },
+  krea2: {
+    key: 'krea2',
+    falId: 'krea/v2/large/text-to-image',
+    label: 'Krea 2',
+    blurb: 'Art-directed stills',
+    priceCents: 12,
+    free: false,
+  },
+}
+
+const ASPECTS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4'])
+const LEGACY_SIZE_TO_ASPECT: Record<string, string> = {
+  square_hd: '1:1',
+  square: '1:1',
+  landscape_16_9: '16:9',
+  portrait_16_9: '9:16',
+  landscape_4_3: '4:3',
+  portrait_4_3: '3:4',
+}
+
+function publicModels() {
+  return Object.values(MODELS).map((m) => ({
+    id: m.key,
+    label: m.label,
+    blurb: m.blurb,
+    priceCents: m.priceCents,
+    free: m.free,
+  }))
+}
+
+function resolveModel(raw: unknown): GenModel {
+  if (typeof raw === 'string' && raw in MODELS) return MODELS[raw as ModelKey]
+  return MODELS.schnell
+}
+
+function resolveAspect(body: { aspect?: unknown; imageSize?: unknown }) {
+  if (typeof body.aspect === 'string' && ASPECTS.has(body.aspect)) return body.aspect
+  if (typeof body.imageSize === 'string') {
+    if (ASPECTS.has(body.imageSize)) return body.imageSize
+    if (LEGACY_SIZE_TO_ASPECT[body.imageSize]) return LEGACY_SIZE_TO_ASPECT[body.imageSize]
+  }
+  return '1:1'
+}
+
+function falPayload(model: GenModel, prompt: string, aspect: string, seed?: number) {
+  const body: Record<string, unknown> = { prompt }
+  if (typeof seed === 'number') body.seed = seed
+  if (model.key === 'schnell') {
+    body.image_size =
+      aspect === '16:9'
+        ? 'landscape_16_9'
+        : aspect === '9:16'
+          ? 'portrait_16_9'
+          : aspect === '4:3'
+            ? 'landscape_4_3'
+            : aspect === '3:4'
+              ? 'portrait_4_3'
+              : 'square_hd'
+    body.num_images = 1
+    body.num_inference_steps = 4
+    body.enable_safety_checker = true
+    body.output_format = 'jpeg'
+  } else if (model.key === 'banana2') {
+    body.num_images = 1
+    body.aspect_ratio = aspect
+    body.output_format = 'jpeg'
+    body.safety_tolerance = '4'
+    body.resolution = '1K'
+    body.limit_generations = true
+  } else {
+    body.aspect_ratio = aspect === '3:4' ? '4:5' : aspect
+    body.creativity = 'medium'
+  }
+  return body
+}
+
+function looksBlocked(status: number, falJson: { error?: string; detail?: unknown; description?: string } | null) {
+  if (status === 422) return true
+  const bits = [falJson?.error, falJson?.description, typeof falJson?.detail === 'string' ? falJson.detail : '']
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+  return /nsfw|safety|blocked|content.?polic|prohibited|moderation/.test(bits)
+}
 
 type FalImage = {
   url?: string
@@ -164,20 +265,22 @@ export const genStatusEndpoint: Endpoint = {
     const genUser = await loadGenUser(req, userId)
     const remaining = Math.max(0, DAILY_LIMIT - used)
     const balanceCents = Number(genUser.genBalanceCents) || 0
+    const cheapestPaid = Math.min(...Object.values(MODELS).map((m) => m.priceCents))
     return Response.json({
       enabled: Boolean(process.env.FAL_KEY),
-      model: MODEL_LABEL,
-      modelId: MODEL_ID,
+      model: MODELS.schnell.label,
+      modelId: MODELS.schnell.key,
+      models: publicModels(),
       dailyLimit: DAILY_LIMIT,
       used,
       remaining,
       failStreak: Number(genUser.genFailStreak) || 0,
       failsPerSlot: FAILS_PER_SLOT,
       balanceCents,
-      priceCents: PAID_SCHNELL_CENTS,
+      priceCents: MODELS.schnell.priceCents,
       stripeEnabled: stripeCheckoutEnabled(),
       packs: [5, 15, 40, 100, 500],
-      canGenerate: remaining > 0 || balanceCents >= PAID_SCHNELL_CENTS,
+      canGenerate: remaining > 0 || balanceCents >= cheapestPaid,
     })
   },
 }
@@ -330,6 +433,8 @@ export const genImageEndpoint: Endpoint = {
 
     const body = (req.data || {}) as {
       prompt?: unknown
+      model?: unknown
+      aspect?: unknown
       imageSize?: unknown
       seed?: unknown
     }
@@ -341,8 +446,8 @@ export const genImageEndpoint: Endpoint = {
       return Response.json({ message: 'Prompt is too long (max 2000 characters).' }, { status: 400 })
     }
 
-    const imageSize =
-      typeof body.imageSize === 'string' && IMAGE_SIZES.has(body.imageSize) ? body.imageSize : 'square_hd'
+    const model = resolveModel(body.model)
+    const aspect = resolveAspect(body)
     const seed =
       typeof body.seed === 'number' && Number.isFinite(body.seed)
         ? Math.floor(body.seed)
@@ -355,36 +460,32 @@ export const genImageEndpoint: Endpoint = {
     const remainingFree = Math.max(0, DAILY_LIMIT - used)
     const genUser = await loadGenUser(req, userId)
     const balanceCents = Number(genUser.genBalanceCents) || 0
-    if (remainingFree < 1 && balanceCents < PAID_SCHNELL_CENTS) {
+    const useFree = model.free && remainingFree > 0
+    if (!useFree && balanceCents < model.priceCents) {
+      const hint = model.free
+        ? `Daily free gens are used. Add funds to keep generating ($${(model.priceCents / 100).toFixed(2)} each).`
+        : `${model.label} is $${(model.priceCents / 100).toFixed(2)} each. Add funds to generate.`
       return Response.json(
         {
-          message: `Daily free gens are used. Add funds to keep generating ($${ (PAID_SCHNELL_CENTS / 100).toFixed(2) } each).`,
-          remaining: 0,
+          message: hint,
+          remaining: remainingFree,
           balanceCents,
-          priceCents: PAID_SCHNELL_CENTS,
+          priceCents: model.priceCents,
+          model: model.label,
+          modelId: model.key,
           needsFunds: true,
         },
         { status: 402 },
       )
     }
 
-    const falBody: Record<string, unknown> = {
-      prompt,
-      image_size: imageSize,
-      num_images: 1,
-      num_inference_steps: 4,
-      enable_safety_checker: true,
-      output_format: 'jpeg',
-    }
-    if (typeof seed === 'number') falBody.seed = seed
-
-    const falRes = await fetch(`https://fal.run/${MODEL_ID}`, {
+    const falRes = await fetch(`https://fal.run/${model.falId}`, {
       method: 'POST',
       headers: {
         Authorization: `Key ${falKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(falBody),
+      body: JSON.stringify(falPayload(model, prompt, aspect, seed)),
     })
 
     const falJson = (await falRes.json().catch(() => null)) as {
@@ -393,19 +494,15 @@ export const genImageEndpoint: Endpoint = {
       has_nsfw_concepts?: boolean[]
       detail?: unknown
       error?: string
+      description?: string
     } | null
 
-    if (!falRes.ok) {
-      const detail = falJson && typeof falJson.error === 'string' ? falJson.error : 'The image service failed.'
-      return Response.json({ message: detail }, { status: 502 })
-    }
-
-    if (falJson?.has_nsfw_concepts?.[0]) {
+    const blocked = Boolean(falJson?.has_nsfw_concepts?.[0]) || looksBlocked(falRes.status, falJson)
+    if (blocked) {
       const block = await recordBlockedGen(req, userId)
       const usedAfter = await usedToday(req, userId)
       const remaining = Math.max(0, DAILY_LIMIT - usedAfter)
-      const policy =
-        'Every 3 blocked prompts uses 1 free gen, to stop abuse and bots.'
+      const policy = 'Every 3 blocked prompts uses 1 free gen, to stop abuse and bots.'
       const message = block.consumed
         ? `That prompt was blocked by the safety checker. ${policy} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 free gen. ${remaining} left today.`
         : `That prompt was blocked by the safety checker. ${policy} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
@@ -416,8 +513,20 @@ export const genImageEndpoint: Endpoint = {
           failStreak: block.streak,
           failsPerSlot: FAILS_PER_SLOT,
           slotConsumed: block.consumed,
+          balanceCents,
+          priceCents: model.priceCents,
+          model: model.label,
+          modelId: model.key,
         },
         { status: 422 },
+      )
+    }
+
+    if (!falRes.ok) {
+      const detail = falJson && typeof falJson.error === 'string' ? falJson.error : 'The image service failed.'
+      return Response.json(
+        { message: detail, remaining: remainingFree, balanceCents, priceCents: model.priceCents },
+        { status: 502 },
       )
     }
 
@@ -431,8 +540,10 @@ export const genImageEndpoint: Endpoint = {
       const fileRes = await fetch(image.url)
       if (fileRes.ok) {
         const bytes = Buffer.from(await fileRes.arrayBuffer())
-        const name = `${userId}-${Date.now()}.jpg`
-        storedUrl = (await persistToR2(bytes, name, 'image/jpeg')) || image.url
+        const contentType = fileRes.headers.get('content-type') || 'image/jpeg'
+        const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
+        const name = `${userId}-${Date.now()}.${ext}`
+        storedUrl = (await persistToR2(bytes, name, contentType)) || image.url
       }
     } catch {
       storedUrl = image.url
@@ -444,8 +555,8 @@ export const genImageEndpoint: Endpoint = {
       data: {
         user: userId,
         prompt,
-        model: MODEL_LABEL,
-        imageSize,
+        model: model.label,
+        imageSize: aspect,
         seed: typeof falJson?.seed === 'number' ? falJson.seed : seed,
         url: storedUrl,
         width: image.width,
@@ -455,9 +566,12 @@ export const genImageEndpoint: Endpoint = {
 
     let chargedCents = 0
     let nextBalance = balanceCents
-    if (remainingFree < 1) {
-      chargedCents = PAID_SCHNELL_CENTS
-      nextBalance = balanceCents - PAID_SCHNELL_CENTS
+    let remaining = remainingFree
+    if (useFree) {
+      remaining = Math.max(0, remainingFree - 1)
+    } else {
+      chargedCents = model.priceCents
+      nextBalance = balanceCents - model.priceCents
       await req.payload.update({
         collection: 'users',
         id: userId,
@@ -470,11 +584,12 @@ export const genImageEndpoint: Endpoint = {
       id: doc.id,
       url: storedUrl,
       seed: typeof falJson?.seed === 'number' ? falJson.seed : seed,
-      model: MODEL_LABEL,
-      remaining: Math.max(0, remainingFree - 1),
+      model: model.label,
+      modelId: model.key,
+      remaining,
       balanceCents: nextBalance,
       chargedCents,
-      priceCents: PAID_SCHNELL_CENTS,
+      priceCents: model.priceCents,
     })
   },
 }
