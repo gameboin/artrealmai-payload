@@ -5,14 +5,17 @@ import { stripeCheckoutEnabled } from './stripeWallet'
 const DAILY_LIMIT = 4
 
 type ModelKey = 'schnell' | 'banana2' | 'krea2'
+type GenMode = 't2i' | 'i2i'
 
 type GenModel = {
   key: ModelKey
   falId: string
+  falEditId?: string
   label: string
   blurb: string
   priceCents: number
   free: boolean
+  modes: GenMode[]
 }
 
 const MODELS: Record<ModelKey, GenModel> = {
@@ -23,14 +26,17 @@ const MODELS: Record<ModelKey, GenModel> = {
     blurb: 'Fast preview',
     priceCents: 5,
     free: true,
+    modes: ['t2i'],
   },
   banana2: {
     key: 'banana2',
     falId: 'fal-ai/nano-banana-2',
+    falEditId: 'fal-ai/nano-banana-2/edit',
     label: 'Nano Banana 2',
     blurb: 'Gemini · sharp text',
     priceCents: 15,
     free: false,
+    modes: ['t2i', 'i2i'],
   },
   krea2: {
     key: 'krea2',
@@ -39,8 +45,11 @@ const MODELS: Record<ModelKey, GenModel> = {
     blurb: 'Art-directed stills',
     priceCents: 12,
     free: false,
+    modes: ['t2i'],
   },
 }
+
+const MAX_SOURCE_BYTES = 4 * 1024 * 1024
 
 const ASPECTS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4'])
 const LEGACY_SIZE_TO_ASPECT: Record<string, string> = {
@@ -59,6 +68,7 @@ function publicModels() {
     blurb: m.blurb,
     priceCents: m.priceCents,
     free: m.free,
+    modes: m.modes,
   }))
 }
 
@@ -76,7 +86,7 @@ function resolveAspect(body: { aspect?: unknown; imageSize?: unknown }) {
   return '1:1'
 }
 
-function falPayload(model: GenModel, prompt: string, aspect: string, seed?: number) {
+function falPayload(model: GenModel, prompt: string, aspect: string, seed?: number, imageUrl?: string) {
   const body: Record<string, unknown> = { prompt }
   if (typeof seed === 'number') body.seed = seed
   if (model.key === 'schnell') {
@@ -101,11 +111,23 @@ function falPayload(model: GenModel, prompt: string, aspect: string, seed?: numb
     body.safety_tolerance = '4'
     body.resolution = '1K'
     body.limit_generations = true
+    if (imageUrl) body.image_urls = [imageUrl]
   } else {
     body.aspect_ratio = aspect === '3:4' ? '4:5' : aspect
     body.creativity = 'medium'
   }
   return body
+}
+
+function parseDataImage(raw: unknown) {
+  if (typeof raw !== 'string' || !raw.startsWith('data:image/')) return null
+  const match = raw.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/i)
+  if (!match) return null
+  const contentType = match[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : match[1].toLowerCase()
+  const buffer = Buffer.from(match[2].replace(/\s/g, ''), 'base64')
+  if (!buffer.length || buffer.length > MAX_SOURCE_BYTES) return null
+  const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
+  return { buffer, contentType, ext }
 }
 
 function looksBlocked(status: number, falJson: { error?: string; detail?: unknown; description?: string } | null) {
@@ -154,12 +176,12 @@ function r2Client() {
   })
 }
 
-async function persistToR2(buffer: Buffer, filename: string, contentType: string) {
+async function persistToR2(buffer: Buffer, filename: string, contentType: string, folder = 'gens') {
   const client = r2Client()
   const bucket = process.env.R2_BUCKET
   const domain = process.env.R2_PUBLIC_ACCESS_DOMAIN
   if (!client || !bucket || !domain) return null
-  const key = `gens/${filename}`
+  const key = `${folder}/${filename}`
   await client.send(
     new PutObjectCommand({
       Bucket: bucket,
@@ -271,6 +293,11 @@ export const genStatusEndpoint: Endpoint = {
       model: MODELS.schnell.label,
       modelId: MODELS.schnell.key,
       models: publicModels(),
+      modes: [
+        { id: 't2i', label: 'Text to image' },
+        { id: 'i2i', label: 'Image to image' },
+        { id: 'video', label: 'Video', soon: true },
+      ],
       dailyLimit: DAILY_LIMIT,
       used,
       remaining,
@@ -434,9 +461,11 @@ export const genImageEndpoint: Endpoint = {
     const body = (req.data || {}) as {
       prompt?: unknown
       model?: unknown
+      mode?: unknown
       aspect?: unknown
       imageSize?: unknown
       seed?: unknown
+      image?: unknown
     }
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
     if (prompt.length < 3) {
@@ -447,6 +476,14 @@ export const genImageEndpoint: Endpoint = {
     }
 
     const model = resolveModel(body.model)
+    const mode: GenMode = body.mode === 'i2i' ? 'i2i' : 't2i'
+    if (!model.modes.includes(mode)) {
+      return Response.json(
+        { message: `${model.label} does not support ${mode === 'i2i' ? 'image to image' : 'text to image'} yet.` },
+        { status: 400 },
+      )
+    }
+
     const aspect = resolveAspect(body)
     const seed =
       typeof body.seed === 'number' && Number.isFinite(body.seed)
@@ -456,11 +493,28 @@ export const genImageEndpoint: Endpoint = {
           : undefined
 
     const userId = String(req.user.id)
+
+    let sourceUrl = ''
+    if (mode === 'i2i') {
+      const parsed = parseDataImage(body.image)
+      if (!parsed) {
+        return Response.json(
+          { message: 'Add a JPEG, PNG, or WebP under 4 MB to use image to image.' },
+          { status: 400 },
+        )
+      }
+      sourceUrl =
+        (await persistToR2(parsed.buffer, `${userId}-${Date.now()}.${parsed.ext}`, parsed.contentType, 'gens/in')) || ''
+      if (!sourceUrl) {
+        return Response.json({ message: 'Could not store the source image. Try a smaller file.' }, { status: 502 })
+      }
+    }
+
     const used = await usedToday(req, userId)
     const remainingFree = Math.max(0, DAILY_LIMIT - used)
     const genUser = await loadGenUser(req, userId)
     const balanceCents = Number(genUser.genBalanceCents) || 0
-    const useFree = model.free && remainingFree > 0
+    const useFree = model.free && mode === 't2i' && remainingFree > 0
     if (!useFree && balanceCents < model.priceCents) {
       const hint = model.free
         ? `Daily free gens are used. Add funds to keep generating ($${(model.priceCents / 100).toFixed(2)} each).`
@@ -479,13 +533,14 @@ export const genImageEndpoint: Endpoint = {
       )
     }
 
-    const falRes = await fetch(`https://fal.run/${model.falId}`, {
+    const falId = mode === 'i2i' ? model.falEditId || model.falId : model.falId
+    const falRes = await fetch(`https://fal.run/${falId}`, {
       method: 'POST',
       headers: {
         Authorization: `Key ${falKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(falPayload(model, prompt, aspect, seed)),
+      body: JSON.stringify(falPayload(model, prompt, aspect, seed, sourceUrl || undefined)),
     })
 
     const falJson = (await falRes.json().catch(() => null)) as {
