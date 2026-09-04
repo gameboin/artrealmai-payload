@@ -150,7 +150,7 @@ type FalJson = {
 const MAX_FILTERED_PER_DAY = 12
 const MAX_REJECTS_PER_DAY = 20
 const FILTERED_LEAD =
-  "That prompt was blocked by the model's safety checker after the image ran. This uses 1 gen because a completed run still costs us compute even when you do not get the image."
+  "That prompt was blocked by the model's safety checker after the image ran. This uses 1 gen because a completed run still costs us even when you do not get the image."
 const REJECTED_LEAD =
   'That prompt was rejected before a billed run started, so this one is free. We still cap rejected prompts to stop spam and bot abuse.'
 
@@ -587,7 +587,7 @@ export const genImageEndpoint: Endpoint = {
     if (filteredToday(genUser) >= MAX_FILTERED_PER_DAY) {
       return Response.json(
         {
-          message: 'Too many filtered images today. This limit protects the compute bill. Try again tomorrow.',
+          message: 'Too many filtered images today. Try again tomorrow.',
           remaining: remainingFree,
           balanceCents,
           priceCents: model.priceCents,
