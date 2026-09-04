@@ -7,11 +7,10 @@ export const ContactSubmissions: CollectionConfig = {
     defaultColumns: ['topic', 'name', 'email', 'createdAt'],
   },
   access: {
-    // Only logged-in users can see submissions, but anyone can create one
-    read: ({ req: { user } }) => !!user,
-    create: () => true, 
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    read: ({ req: { user } }) => Boolean((user as { roles?: string[] } | null)?.roles?.includes('admin')),
+    create: () => true,
+    update: ({ req: { user } }) => Boolean((user as { roles?: string[] } | null)?.roles?.includes('admin')),
+    delete: ({ req: { user } }) => Boolean((user as { roles?: string[] } | null)?.roles?.includes('admin')),
   },
   fields: [
     {

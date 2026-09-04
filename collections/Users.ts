@@ -1,20 +1,25 @@
 import type { CollectionConfig } from 'payload'
 
+function isAdmin(user: unknown) {
+  return Boolean((user as { roles?: string[] } | null)?.roles?.includes('admin'))
+}
+
 export const Users: CollectionConfig = {
   slug: 'users',
   auth: true,
   access: {
-    read: () => true,
+    read: ({ req: { user } }) => {
+      if (!user) return false
+      if (isAdmin(user)) return true
+      return { id: { equals: user.id } }
+    },
     create: () => true,
-    // IMPORTANT: Only allow users to update THEMSELVES
     update: ({ req: { user }, id }) => {
       if (!user) return false
-      
-      // FIX: We cast user to 'any' so TypeScript stops complaining about .roles
-      if ((user as any).roles?.includes('admin')) return true
-      
+      if (isAdmin(user)) return true
       return user.id === id
     },
+    delete: ({ req: { user } }) => isAdmin(user),
   },
   fields: [
     { name: 'name', type: 'text', required: true },
@@ -23,6 +28,7 @@ export const Users: CollectionConfig = {
       name: 'googleId',
       type: 'text',
       index: true,
+      access: { update: () => false },
       admin: {
         position: 'sidebar',
         readOnly: true,
@@ -35,6 +41,9 @@ export const Users: CollectionConfig = {
       hasMany: true,
       defaultValue: ['user'],
       options: ['user', 'admin'],
+      access: {
+        update: ({ req: { user } }) => isAdmin(user),
+      },
     },
     {
       name: 'genFailStreak',
