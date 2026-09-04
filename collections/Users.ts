@@ -66,6 +66,13 @@ export const Users: CollectionConfig = {
       admin: { hidden: true },
     },
     {
+      name: 'genBlockCount',
+      type: 'number',
+      defaultValue: 0,
+      access: { update: () => false },
+      admin: { hidden: true },
+    },
+    {
       name: 'genBalanceCents',
       type: 'number',
       defaultValue: 0,

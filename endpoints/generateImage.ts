@@ -146,6 +146,14 @@ type FalImage = {
 }
 
 const FAILS_PER_SLOT = 3
+const MAX_BLOCKS_PER_DAY = 12
+const BLOCKED_LEAD = 'That prompt was blocked by the models safety checker.'
+const BLOCKED_WHY =
+  'The GPU still bills us on blocked outputs, so every 3 blocked prompts uses 1 gen.'
+
+function money(cents: number) {
+  return '$' + (Number(cents || 0) / 100).toFixed(2)
+}
 
 function startOfUtcDay() {
   const now = new Date()
@@ -161,6 +169,7 @@ type GenUser = {
   genFailStreak?: number | null
   genPenaltySlots?: number | null
   genPenaltyDay?: string | null
+  genBlockCount?: number | null
   genBalanceCents?: number | null
 }
 
@@ -240,10 +249,18 @@ async function loadGenUser(req: PayloadRequest, userId: string) {
   })) as GenUser
 }
 
+function sameGenDay(user: GenUser) {
+  return user.genPenaltyDay === utcDayKey()
+}
+
 function penaltySlotsForToday(user: GenUser) {
-  const day = utcDayKey()
-  if (user.genPenaltyDay !== day) return 0
+  if (!sameGenDay(user)) return 0
   return Number(user.genPenaltySlots) || 0
+}
+
+function blocksToday(user: GenUser) {
+  if (!sameGenDay(user)) return 0
+  return Number(user.genBlockCount) || 0
 }
 
 async function usedToday(req: PayloadRequest, userId: string) {
@@ -252,14 +269,20 @@ async function usedToday(req: PayloadRequest, userId: string) {
   return gens + penaltySlotsForToday(user)
 }
 
-async function recordBlockedGen(req: PayloadRequest, userId: string) {
+async function recordBlockedGen(
+  req: PayloadRequest,
+  userId: string,
+  opts: { consumeFreeSlot: boolean },
+) {
   const user = await loadGenUser(req, userId)
   const day = utcDayKey()
   const penalties = penaltySlotsForToday(user)
-  const nextStreak = (Number(user.genFailStreak) || 0) + 1
+  const prevStreak = sameGenDay(user) ? Number(user.genFailStreak) || 0 : 0
+  const nextStreak = prevStreak + 1
   const consumed = nextStreak >= FAILS_PER_SLOT
   const streak = consumed ? 0 : nextStreak
-  const nextPenalties = penalties + (consumed ? 1 : 0)
+  const nextPenalties = penalties + (consumed && opts.consumeFreeSlot ? 1 : 0)
+  const nextBlocks = blocksToday(user) + 1
 
   await req.payload.update({
     collection: 'users',
@@ -269,10 +292,11 @@ async function recordBlockedGen(req: PayloadRequest, userId: string) {
       genFailStreak: streak,
       genPenaltySlots: nextPenalties,
       genPenaltyDay: day,
+      genBlockCount: nextBlocks,
     } as never,
   })
 
-  return { streak, consumed, penalties: nextPenalties }
+  return { streak: consumed ? FAILS_PER_SLOT : streak, consumed, penalties: nextPenalties, blocks: nextBlocks }
 }
 
 export const genStatusEndpoint: Endpoint = {
@@ -515,6 +539,19 @@ export const genImageEndpoint: Endpoint = {
     const genUser = await loadGenUser(req, userId)
     const balanceCents = Number(genUser.genBalanceCents) || 0
     const useFree = model.free && mode === 't2i' && remainingFree > 0
+    if (blocksToday(genUser) >= MAX_BLOCKS_PER_DAY) {
+      return Response.json(
+        {
+          message: 'Too many blocked prompts today. This limit protects the GPU bill. Try again tomorrow.',
+          remaining: remainingFree,
+          balanceCents,
+          priceCents: model.priceCents,
+          model: model.label,
+          modelId: model.key,
+        },
+        { status: 429 },
+      )
+    }
     if (!useFree && balanceCents < model.priceCents) {
       const hint = model.free
         ? `Daily free gens are used. Add funds to keep generating ($${(model.priceCents / 100).toFixed(2)} each).`
@@ -554,21 +591,41 @@ export const genImageEndpoint: Endpoint = {
 
     const blocked = Boolean(falJson?.has_nsfw_concepts?.[0]) || looksBlocked(falRes.status, falJson)
     if (blocked) {
-      const block = await recordBlockedGen(req, userId)
+      const block = await recordBlockedGen(req, userId, { consumeFreeSlot: useFree })
+      let chargedCents = 0
+      let nextBalance = balanceCents
+      if (block.consumed && !useFree) {
+        chargedCents = model.priceCents
+        nextBalance = Math.max(0, balanceCents - model.priceCents)
+        await req.payload.update({
+          collection: 'users',
+          id: userId,
+          overrideAccess: true,
+          data: { genBalanceCents: nextBalance } as never,
+        })
+      }
       const usedAfter = await usedToday(req, userId)
       const remaining = Math.max(0, DAILY_LIMIT - usedAfter)
-      const policy = 'Every 3 blocked prompts uses 1 free gen, to stop abuse and bots.'
-      const message = block.consumed
-        ? `That prompt was blocked by the safety checker. ${policy} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 free gen. ${remaining} left today.`
-        : `That prompt was blocked by the safety checker. ${policy} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
+      let message = `${BLOCKED_LEAD} ${BLOCKED_WHY} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
+      if (useFree) {
+        message = block.consumed
+          ? `${BLOCKED_LEAD} ${BLOCKED_WHY} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 free gen. ${remaining} left today.`
+          : `${BLOCKED_LEAD} ${BLOCKED_WHY} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
+      } else {
+        const price = money(model.priceCents)
+        message = block.consumed
+          ? `${BLOCKED_LEAD} ${BLOCKED_WHY} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 ${model.label} gen (${price}). Balance ${money(nextBalance)}.`
+          : `${BLOCKED_LEAD} ${BLOCKED_WHY} This is fail ${block.streak} of ${FAILS_PER_SLOT}. The third uses 1 ${model.label} gen (${price}).`
+      }
       return Response.json(
         {
           message,
           remaining,
-          failStreak: block.streak,
+          failStreak: block.consumed ? 0 : block.streak,
           failsPerSlot: FAILS_PER_SLOT,
           slotConsumed: block.consumed,
-          balanceCents,
+          chargedCents,
+          balanceCents: nextBalance,
           priceCents: model.priceCents,
           model: model.label,
           modelId: model.key,
