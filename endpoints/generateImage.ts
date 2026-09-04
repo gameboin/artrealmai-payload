@@ -147,12 +147,10 @@ type FalJson = {
   description?: string
 } | null
 
-const MAX_FILTERED_PER_DAY = 12
-const MAX_REJECTS_PER_DAY = 20
 const FILTERED_LEAD =
   "That prompt was blocked by the model's safety checker after the image ran. This uses 1 gen because a completed run still costs us even when you do not get the image."
 const REJECTED_LEAD =
-  'That prompt was rejected before a billed run started, so this one is free. We still cap rejected prompts to stop spam and bot abuse.'
+  'That prompt was rejected before a billed run started, so this one is free.'
 
 function collectFalErrorBits(falJson: FalJson) {
   const types: string[] = []
@@ -584,34 +582,6 @@ export const genImageEndpoint: Endpoint = {
     const genUser = await loadGenUser(req, userId)
     const balanceCents = Number(genUser.genBalanceCents) || 0
     const useFree = model.free && mode === 't2i' && remainingFree > 0
-    if (filteredToday(genUser) >= MAX_FILTERED_PER_DAY) {
-      return Response.json(
-        {
-          message: 'Too many filtered images today. Try again tomorrow.',
-          remaining: remainingFree,
-          balanceCents,
-          priceCents: model.priceCents,
-          model: model.label,
-          modelId: model.key,
-          blockKind: 'limit',
-        },
-        { status: 429 },
-      )
-    }
-    if (rejectsToday(genUser) >= MAX_REJECTS_PER_DAY) {
-      return Response.json(
-        {
-          message: 'Too many rejected prompts today. Try again tomorrow.',
-          remaining: remainingFree,
-          balanceCents,
-          priceCents: model.priceCents,
-          model: model.label,
-          modelId: model.key,
-          blockKind: 'limit',
-        },
-        { status: 429 },
-      )
-    }
     if (!useFree && balanceCents < model.priceCents) {
       const hint = model.free
         ? `Daily free gens are used. Add funds to keep generating ($${(model.priceCents / 100).toFixed(2)} each).`
