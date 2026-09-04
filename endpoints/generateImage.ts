@@ -147,9 +147,8 @@ type FalImage = {
 
 const FAILS_PER_SLOT = 3
 const MAX_BLOCKS_PER_DAY = 12
-const BLOCKED_LEAD = 'That prompt was blocked by the models safety checker.'
-const BLOCKED_WHY =
-  'The GPU still bills us on blocked outputs, so every 3 blocked prompts uses 1 gen.'
+const BLOCKED_LEAD =
+  'That prompt was blocked by the models safety checker. The GPU bills us on every blocked output, so we bill every 3 blocked outputs to stop spam and bot abuse.'
 
 function money(cents: number) {
   return '$' + (Number(cents || 0) / 100).toFixed(2)
@@ -606,16 +605,16 @@ export const genImageEndpoint: Endpoint = {
       }
       const usedAfter = await usedToday(req, userId)
       const remaining = Math.max(0, DAILY_LIMIT - usedAfter)
-      let message = `${BLOCKED_LEAD} ${BLOCKED_WHY} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
+      let message = `${BLOCKED_LEAD} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
       if (useFree) {
         message = block.consumed
-          ? `${BLOCKED_LEAD} ${BLOCKED_WHY} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 free gen. ${remaining} left today.`
-          : `${BLOCKED_LEAD} ${BLOCKED_WHY} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
+          ? `${BLOCKED_LEAD} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 free gen. ${remaining} left today.`
+          : `${BLOCKED_LEAD} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
       } else {
         const price = money(model.priceCents)
         message = block.consumed
-          ? `${BLOCKED_LEAD} ${BLOCKED_WHY} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 ${model.label} gen (${price}). Balance ${money(nextBalance)}.`
-          : `${BLOCKED_LEAD} ${BLOCKED_WHY} This is fail ${block.streak} of ${FAILS_PER_SLOT}. The third uses 1 ${model.label} gen (${price}).`
+          ? `${BLOCKED_LEAD} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 ${model.label} gen (${price}). Balance ${money(nextBalance)}.`
+          : `${BLOCKED_LEAD} This is fail ${block.streak} of ${FAILS_PER_SLOT}. The third uses 1 ${model.label} gen (${price}).`
       }
       return Response.json(
         {
