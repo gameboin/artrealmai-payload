@@ -130,25 +130,76 @@ function parseDataImage(raw: unknown) {
   return { buffer, contentType, ext }
 }
 
-function looksBlocked(status: number, falJson: { error?: string; detail?: unknown; description?: string } | null) {
-  if (status === 422) return true
-  const bits = [falJson?.error, falJson?.description, typeof falJson?.detail === 'string' ? falJson.detail : '']
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-  return /nsfw|safety|blocked|content.?polic|prohibited|moderation/.test(bits)
-}
-
 type FalImage = {
   url?: string
   width?: number
   height?: number
 }
 
-const FAILS_PER_SLOT = 3
-const MAX_BLOCKS_PER_DAY = 12
-const BLOCKED_LEAD =
-  'That prompt was blocked by the models safety checker. The GPU bills us on every blocked output, so we bill every 3 blocked outputs to stop spam and bot abuse.'
+type FalJson = {
+  images?: FalImage[]
+  seed?: number
+  has_nsfw_concepts?: boolean[]
+  detail?: unknown
+  body?: unknown
+  payload?: unknown
+  error?: string
+  description?: string
+} | null
+
+const MAX_FILTERED_PER_DAY = 12
+const MAX_REJECTS_PER_DAY = 20
+const FILTERED_LEAD =
+  "That prompt was blocked by the model's safety checker after the image ran. This uses 1 gen because a completed run still costs us compute even when you do not get the image."
+const REJECTED_LEAD =
+  'That prompt was rejected before a billed run started, so this one is free. We still cap rejected prompts to stop spam and bot abuse.'
+
+function collectFalErrorBits(falJson: FalJson) {
+  const types: string[] = []
+  const parts: string[] = []
+  if (!falJson) return { text: '', types }
+  if (typeof falJson.error === 'string') parts.push(falJson.error)
+  if (typeof falJson.description === 'string') parts.push(falJson.description)
+  const walk = (value: unknown) => {
+    if (!value) return
+    if (typeof value === 'string') {
+      parts.push(value)
+      return
+    }
+    if (Array.isArray(value)) {
+      value.forEach(walk)
+      return
+    }
+    if (typeof value === 'object') {
+      const row = value as { msg?: unknown; type?: unknown; message?: unknown }
+      if (typeof row.type === 'string') types.push(row.type)
+      if (typeof row.msg === 'string') parts.push(row.msg)
+      if (typeof row.message === 'string') parts.push(row.message)
+    }
+  }
+  walk(falJson.detail)
+  walk(falJson.body)
+  walk(falJson.payload)
+  return { text: parts.join(' ').toLowerCase(), types }
+}
+
+function isPolicyReject(falJson: FalJson) {
+  const { text, types } = collectFalErrorBits(falJson)
+  if (types.some((type) => /content_policy|safety|moderation|nsfw/i.test(type))) return true
+  return /content_policy_violation|content.?polic|nsfw|safety checker|blocked|prohibited|moderation/.test(text)
+}
+
+function classifyFal(status: number, falJson: FalJson): 'ok' | 'filtered' | 'rejected' | 'error' {
+  const nsfwFlag = Array.isArray(falJson?.has_nsfw_concepts) && falJson.has_nsfw_concepts.some(Boolean)
+  const imageUrl = falJson?.images?.[0]?.url
+  if (nsfwFlag) return 'filtered'
+  if (status >= 200 && status < 300) {
+    if (!imageUrl) return 'filtered'
+    return 'ok'
+  }
+  if (isPolicyReject(falJson)) return imageUrl ? 'filtered' : 'rejected'
+  return 'error'
+}
 
 function money(cents: number) {
   return '$' + (Number(cents || 0) / 100).toFixed(2)
@@ -169,6 +220,7 @@ type GenUser = {
   genPenaltySlots?: number | null
   genPenaltyDay?: string | null
   genBlockCount?: number | null
+  genRejectCount?: number | null
   genBalanceCents?: number | null
 }
 
@@ -257,9 +309,14 @@ function penaltySlotsForToday(user: GenUser) {
   return Number(user.genPenaltySlots) || 0
 }
 
-function blocksToday(user: GenUser) {
+function filteredToday(user: GenUser) {
   if (!sameGenDay(user)) return 0
   return Number(user.genBlockCount) || 0
+}
+
+function rejectsToday(user: GenUser) {
+  if (!sameGenDay(user)) return 0
+  return Number(user.genRejectCount) || 0
 }
 
 async function usedToday(req: PayloadRequest, userId: string) {
@@ -268,34 +325,23 @@ async function usedToday(req: PayloadRequest, userId: string) {
   return gens + penaltySlotsForToday(user)
 }
 
-async function recordBlockedGen(
+async function saveSafetyDay(
   req: PayloadRequest,
   userId: string,
-  opts: { consumeFreeSlot: boolean },
+  state: { filtered: number; rejects: number; penalties: number },
 ) {
-  const user = await loadGenUser(req, userId)
-  const day = utcDayKey()
-  const penalties = penaltySlotsForToday(user)
-  const prevStreak = sameGenDay(user) ? Number(user.genFailStreak) || 0 : 0
-  const nextStreak = prevStreak + 1
-  const consumed = nextStreak >= FAILS_PER_SLOT
-  const streak = consumed ? 0 : nextStreak
-  const nextPenalties = penalties + (consumed && opts.consumeFreeSlot ? 1 : 0)
-  const nextBlocks = blocksToday(user) + 1
-
   await req.payload.update({
     collection: 'users',
     id: userId,
     overrideAccess: true,
     data: {
-      genFailStreak: streak,
-      genPenaltySlots: nextPenalties,
-      genPenaltyDay: day,
-      genBlockCount: nextBlocks,
+      genFailStreak: 0,
+      genPenaltySlots: state.penalties,
+      genPenaltyDay: utcDayKey(),
+      genBlockCount: state.filtered,
+      genRejectCount: state.rejects,
     } as never,
   })
-
-  return { streak: consumed ? FAILS_PER_SLOT : streak, consumed, penalties: nextPenalties, blocks: nextBlocks }
 }
 
 export const genStatusEndpoint: Endpoint = {
@@ -324,8 +370,8 @@ export const genStatusEndpoint: Endpoint = {
       dailyLimit: DAILY_LIMIT,
       used,
       remaining,
-      failStreak: Number(genUser.genFailStreak) || 0,
-      failsPerSlot: FAILS_PER_SLOT,
+      failStreak: 0,
+      failsPerSlot: 1,
       balanceCents,
       priceCents: MODELS.schnell.priceCents,
       stripeEnabled: stripeCheckoutEnabled(),
@@ -538,15 +584,30 @@ export const genImageEndpoint: Endpoint = {
     const genUser = await loadGenUser(req, userId)
     const balanceCents = Number(genUser.genBalanceCents) || 0
     const useFree = model.free && mode === 't2i' && remainingFree > 0
-    if (blocksToday(genUser) >= MAX_BLOCKS_PER_DAY) {
+    if (filteredToday(genUser) >= MAX_FILTERED_PER_DAY) {
       return Response.json(
         {
-          message: 'Too many blocked prompts today. This limit protects the GPU bill. Try again tomorrow.',
+          message: 'Too many filtered images today. This limit protects the compute bill. Try again tomorrow.',
           remaining: remainingFree,
           balanceCents,
           priceCents: model.priceCents,
           model: model.label,
           modelId: model.key,
+          blockKind: 'limit',
+        },
+        { status: 429 },
+      )
+    }
+    if (rejectsToday(genUser) >= MAX_REJECTS_PER_DAY) {
+      return Response.json(
+        {
+          message: 'Too many rejected prompts today. Try again tomorrow.',
+          remaining: remainingFree,
+          balanceCents,
+          priceCents: model.priceCents,
+          model: model.label,
+          modelId: model.key,
+          blockKind: 'limit',
         },
         { status: 429 },
       )
@@ -579,21 +640,22 @@ export const genImageEndpoint: Endpoint = {
       body: JSON.stringify(falPayload(model, prompt, aspect, seed, sourceUrl || undefined)),
     })
 
-    const falJson = (await falRes.json().catch(() => null)) as {
-      images?: FalImage[]
-      seed?: number
-      has_nsfw_concepts?: boolean[]
-      detail?: unknown
-      error?: string
-      description?: string
-    } | null
+    const falJson = (await falRes.json().catch(() => null)) as FalJson
+    const outcome = classifyFal(falRes.status, falJson)
 
-    const blocked = Boolean(falJson?.has_nsfw_concepts?.[0]) || looksBlocked(falRes.status, falJson)
-    if (blocked) {
-      const block = await recordBlockedGen(req, userId, { consumeFreeSlot: useFree })
+    if (outcome === 'filtered' || outcome === 'rejected') {
+      const nextFiltered = filteredToday(genUser) + (outcome === 'filtered' ? 1 : 0)
+      const nextRejects = rejectsToday(genUser) + (outcome === 'rejected' ? 1 : 0)
+      const nextPenalties = penaltySlotsForToday(genUser) + (outcome === 'filtered' && useFree ? 1 : 0)
+      await saveSafetyDay(req, userId, {
+        filtered: nextFiltered,
+        rejects: nextRejects,
+        penalties: nextPenalties,
+      })
+
       let chargedCents = 0
       let nextBalance = balanceCents
-      if (block.consumed && !useFree) {
+      if (outcome === 'filtered' && !useFree) {
         chargedCents = model.priceCents
         nextBalance = Math.max(0, balanceCents - model.priceCents)
         await req.payload.update({
@@ -603,37 +665,37 @@ export const genImageEndpoint: Endpoint = {
           data: { genBalanceCents: nextBalance } as never,
         })
       }
+
       const usedAfter = await usedToday(req, userId)
       const remaining = Math.max(0, DAILY_LIMIT - usedAfter)
-      let message = `${BLOCKED_LEAD} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
-      if (useFree) {
-        message = block.consumed
-          ? `${BLOCKED_LEAD} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 free gen. ${remaining} left today.`
-          : `${BLOCKED_LEAD} This is fail ${block.streak} of ${FAILS_PER_SLOT}.`
-      } else {
-        const price = money(model.priceCents)
-        message = block.consumed
-          ? `${BLOCKED_LEAD} This was fail ${FAILS_PER_SLOT} of ${FAILS_PER_SLOT} and used 1 ${model.label} gen (${price}). Balance ${money(nextBalance)}.`
-          : `${BLOCKED_LEAD} This is fail ${block.streak} of ${FAILS_PER_SLOT}. The third uses 1 ${model.label} gen (${price}).`
+      let message = REJECTED_LEAD
+      if (outcome === 'filtered') {
+        if (useFree) {
+          message = `${FILTERED_LEAD} Used 1 free gen. ${remaining} left today.`
+        } else {
+          message = `${FILTERED_LEAD} Used 1 ${model.label} gen (${money(model.priceCents)}). Balance ${money(nextBalance)}.`
+        }
       }
+
       return Response.json(
         {
           message,
           remaining,
-          failStreak: block.consumed ? 0 : block.streak,
-          failsPerSlot: FAILS_PER_SLOT,
-          slotConsumed: block.consumed,
+          failStreak: 0,
+          failsPerSlot: 1,
+          slotConsumed: outcome === 'filtered',
           chargedCents,
           balanceCents: nextBalance,
           priceCents: model.priceCents,
           model: model.label,
           modelId: model.key,
+          blockKind: outcome,
         },
         { status: 422 },
       )
     }
 
-    if (!falRes.ok) {
+    if (outcome === 'error' || !falRes.ok) {
       const detail = falJson && typeof falJson.error === 'string' ? falJson.error : 'The image service failed.'
       return Response.json(
         { message: detail, remaining: remainingFree, balanceCents, priceCents: model.priceCents },
