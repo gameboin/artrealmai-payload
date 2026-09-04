@@ -143,7 +143,7 @@ type FalJson = {
   detail?: unknown
   body?: unknown
   payload?: unknown
-  error?: string
+  error?: unknown
   description?: string
 } | null
 
@@ -151,12 +151,25 @@ const FILTERED_LEAD =
   "That prompt was blocked by the model's safety checker after the image ran. This uses 1 gen because a completed run still costs us even when you do not get the image."
 const REJECTED_LEAD =
   'That prompt was rejected before a billed run started, so this one is free.'
+const SERVICE_FAIL =
+  'The image service failed. No gen was used. Try again.'
+const SERVICE_TIMEOUT =
+  'The image service timed out. No gen was used. Try again.'
+const SERVICE_INVALID =
+  'That request could not be processed. No gen was used.'
+
+function normalizeFalJson(raw: unknown): FalJson {
+  if (!raw) return null
+  if (Array.isArray(raw)) return { detail: raw }
+  if (typeof raw === 'string') return { error: raw }
+  if (typeof raw === 'object') return raw as FalJson
+  return null
+}
 
 function collectFalErrorBits(falJson: FalJson) {
   const types: string[] = []
   const parts: string[] = []
   if (!falJson) return { text: '', types }
-  if (typeof falJson.error === 'string') parts.push(falJson.error)
   if (typeof falJson.description === 'string') parts.push(falJson.description)
   const walk = (value: unknown) => {
     if (!value) return
@@ -169,12 +182,14 @@ function collectFalErrorBits(falJson: FalJson) {
       return
     }
     if (typeof value === 'object') {
-      const row = value as { msg?: unknown; type?: unknown; message?: unknown }
+      const row = value as { msg?: unknown; type?: unknown; message?: unknown; error?: unknown }
       if (typeof row.type === 'string') types.push(row.type)
       if (typeof row.msg === 'string') parts.push(row.msg)
       if (typeof row.message === 'string') parts.push(row.message)
+      if (row.error && row.error !== value) walk(row.error)
     }
   }
+  walk(falJson.error)
   walk(falJson.detail)
   walk(falJson.body)
   walk(falJson.payload)
@@ -183,8 +198,10 @@ function collectFalErrorBits(falJson: FalJson) {
 
 function isPolicyReject(falJson: FalJson) {
   const { text, types } = collectFalErrorBits(falJson)
-  if (types.some((type) => /content_policy|safety|moderation|nsfw/i.test(type))) return true
-  return /content_policy_violation|content.?polic|nsfw|safety checker|blocked|prohibited|moderation/.test(text)
+  if (types.some((type) => /content_policy|safety|moderation|nsfw|prohibited/i.test(type))) return true
+  return /content_policy_violation|content.?polic|nsfw|safety checker|image_safety|prohibited_content|flagged|blocked|prohibited|moderation/.test(
+    text,
+  )
 }
 
 function classifyFal(status: number, falJson: FalJson): 'ok' | 'filtered' | 'rejected' | 'error' {
@@ -197,6 +214,15 @@ function classifyFal(status: number, falJson: FalJson): 'ok' | 'filtered' | 'rej
   }
   if (isPolicyReject(falJson)) return imageUrl ? 'filtered' : 'rejected'
   return 'error'
+}
+
+function serviceFailMessage(status: number, falJson: FalJson) {
+  const { text } = collectFalErrorBits(falJson)
+  if (!falJson || status === 408 || status === 504 || /timeout|timed out|gateway/.test(text)) {
+    return SERVICE_TIMEOUT
+  }
+  if (status === 422) return SERVICE_INVALID
+  return SERVICE_FAIL
 }
 
 function money(cents: number) {
@@ -610,7 +636,7 @@ export const genImageEndpoint: Endpoint = {
       body: JSON.stringify(falPayload(model, prompt, aspect, seed, sourceUrl || undefined)),
     })
 
-    const falJson = (await falRes.json().catch(() => null)) as FalJson
+    const falJson = normalizeFalJson(await falRes.json().catch(() => null))
     const outcome = classifyFal(falRes.status, falJson)
 
     if (outcome === 'filtered' || outcome === 'rejected') {
@@ -666,9 +692,14 @@ export const genImageEndpoint: Endpoint = {
     }
 
     if (outcome === 'error' || !falRes.ok) {
-      const detail = falJson && typeof falJson.error === 'string' ? falJson.error : 'The image service failed.'
       return Response.json(
-        { message: detail, remaining: remainingFree, balanceCents, priceCents: model.priceCents },
+        {
+          message: serviceFailMessage(falRes.status, falJson),
+          remaining: remainingFree,
+          balanceCents,
+          priceCents: model.priceCents,
+          blockKind: 'service',
+        },
         { status: 502 },
       )
     }
