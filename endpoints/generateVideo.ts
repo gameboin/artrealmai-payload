@@ -75,7 +75,7 @@ type JobPayload = {
   h?: string
 }
 
-function publicVideoModels() {
+export function publicVideoModels() {
   return Object.values(VIDEO_MODELS).map((m) => ({
     id: m.key,
     label: m.label,
@@ -427,7 +427,7 @@ export const genVideoPollEndpoint: Endpoint = {
     }
     if (status !== 'COMPLETED') {
       if (!status || statusRes.status === 404) {
-        if (Date.now() - job.started < 3 * 60 * 1000) {
+        if (Date.now() - job.started < 10 * 60 * 1000) {
           return Response.json({ pending: true, status: 'queued' })
         }
       }
@@ -456,6 +456,64 @@ export const genVideoPollEndpoint: Endpoint = {
       detail?: unknown
     } | null
     const video = resultJson?.video || resultJson?.response?.video || resultJson?.data?.video
+    const existing = await req.payload.find({
+      collection: 'generations' as never,
+      overrideAccess: true,
+      limit: 1,
+      where: {
+        and: [{ user: { equals: String(req.user.id) } }, { jobId: { equals: job.requestId } }],
+      },
+    })
+    const already = existing.docs[0] as
+      | {
+          id: string
+          url?: string
+          prompt?: string
+          model?: string
+          modelId?: string
+          mode?: string
+          imageSize?: string
+          width?: number
+          height?: number
+          format?: string
+          bytes?: number
+          chargedCents?: number
+          durationMs?: number
+          kind?: string
+          durationSec?: number
+          resolution?: string
+          createdAt?: string
+        }
+      | undefined
+    if (already?.url) {
+      const user = (await req.payload.findByID({
+        collection: 'users',
+        id: String(req.user.id),
+        depth: 0,
+        overrideAccess: true,
+      })) as { genBalanceCents?: number | null }
+      return Response.json({
+        id: already.id,
+        url: already.url,
+        prompt: already.prompt,
+        model: already.model,
+        modelId: already.modelId,
+        mode: already.mode,
+        imageSize: already.imageSize,
+        width: already.width,
+        height: already.height,
+        format: already.format,
+        bytes: already.bytes,
+        durationMs: already.durationMs,
+        kind: already.kind || 'video',
+        durationSec: already.durationSec,
+        resolution: already.resolution,
+        createdAt: already.createdAt,
+        chargedCents: already.chargedCents || 0,
+        priceCents: job.priceCents,
+        balanceCents: Number(user.genBalanceCents) || 0,
+      })
+    }
     if (!resultRes.ok || !video?.url) {
       if (isPolicyFail(resultRes.status, resultJson)) {
         return Response.json(
@@ -507,6 +565,12 @@ export const genVideoPollEndpoint: Endpoint = {
     } catch {
       storedUrl = video.url || storedUrl
     }
+    if (!storedUrl) {
+      return Response.json(
+        { message: 'No video came back. Try again.', blockKind: 'service' },
+        { status: 502 },
+      )
+    }
 
     const nextBalance = Math.max(0, balanceCents - job.priceCents)
     await req.payload.update({
@@ -536,6 +600,7 @@ export const genVideoPollEndpoint: Endpoint = {
         kind: 'video',
         durationSec: job.duration,
         resolution: job.resolution,
+        jobId: job.requestId,
       } as never,
     })) as { id: string; createdAt?: string }
 

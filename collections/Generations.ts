@@ -39,5 +39,6 @@ export const Generations: CollectionConfig = {
     { name: 'kind', type: 'text', defaultValue: 'image' },
     { name: 'durationSec', type: 'number' },
     { name: 'resolution', type: 'text' },
+    { name: 'jobId', type: 'text', index: true },
   ],
 }

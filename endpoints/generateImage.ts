@@ -1,6 +1,7 @@
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { stripeCheckoutEnabled } from './stripeWallet'
+import { publicVideoModels } from './generateVideo'
 
 const DAILY_LIMIT = 4
 
@@ -470,10 +471,12 @@ export const genStatusEndpoint: Endpoint = {
       model: MODELS.schnell.label,
       modelId: MODELS.schnell.key,
       models: publicModels(),
+      videoModels: publicVideoModels(),
       modes: [
         { id: 't2i', label: 'Text to image' },
         { id: 'i2i', label: 'Image to image' },
-        { id: 'video', label: 'Video', soon: true },
+        { id: 't2v', label: 'Text to video' },
+        { id: 'i2v', label: 'Image to video' },
       ],
       dailyLimit: DAILY_LIMIT,
       used,
@@ -523,6 +526,7 @@ export const genListEndpoint: Endpoint = {
           kind?: string | null
           durationSec?: number | null
           resolution?: string | null
+          jobId?: string | null
           createdAt?: string
         }
         return {
@@ -543,6 +547,7 @@ export const genListEndpoint: Endpoint = {
           kind: row.kind || 'image',
           durationSec: row.durationSec,
           resolution: row.resolution,
+          jobId: row.jobId,
           createdAt: row.createdAt,
         }
       }),
