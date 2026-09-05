@@ -61,6 +61,8 @@ const ASPECTS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4'])
 type JobPayload = {
   requestId: string
   falId: string
+  statusUrl: string
+  responseUrl: string
   userId: string
   model: VideoKey
   mode: VideoMode
@@ -167,6 +169,27 @@ function parseDataImage(raw: unknown) {
 
 function falHeaders(falKey: string) {
   return { Authorization: `Key ${falKey}`, 'Content-Type': 'application/json' }
+}
+
+function falAuth(falKey: string) {
+  return { Authorization: `Key ${falKey}` }
+}
+
+function queueRoot(falId: string) {
+  const parts = falId.split('/')
+  const leaf = parts[parts.length - 1] || ''
+  if (['text-to-video', 'image-to-video', 'text-to-image', 'edit'].includes(leaf) && parts.length > 2) {
+    return parts.slice(0, -1).join('/')
+  }
+  return falId
+}
+
+function statusUrlFor(falId: string, requestId: string) {
+  return `https://queue.fal.run/${queueRoot(falId)}/requests/${requestId}/status`
+}
+
+function responseUrlFor(falId: string, requestId: string) {
+  return `https://queue.fal.run/${queueRoot(falId)}/requests/${requestId}/response`
 }
 
 function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect: string, duration: number, resolution: string, imageUrl?: string) {
@@ -314,10 +337,14 @@ export const genVideoStartEndpoint: Endpoint = {
     })
     const submitJson = (await submit.json().catch(() => null)) as {
       request_id?: string
+      requestId?: string
+      status_url?: string
+      response_url?: string
       error?: unknown
       detail?: unknown
     } | null
-    if (!submit.ok || !submitJson?.request_id) {
+    const requestId = submitJson?.request_id || submitJson?.requestId
+    if (!submit.ok || !requestId) {
       if (isPolicyFail(submit.status, submitJson)) {
         return Response.json(
           {
@@ -336,8 +363,10 @@ export const genVideoStartEndpoint: Endpoint = {
     }
 
     const job = signJob({
-      requestId: submitJson.request_id,
+      requestId,
       falId,
+      statusUrl: submitJson?.status_url || statusUrlFor(falId, requestId),
+      responseUrl: submitJson?.response_url || responseUrlFor(falId, requestId),
       userId,
       model: model.key,
       mode,
@@ -382,21 +411,26 @@ export const genVideoPollEndpoint: Endpoint = {
       return Response.json({ message: 'That video job was not found.' }, { status: 404 })
     }
 
-    const statusRes = await fetch(
-      `https://queue.fal.run/${job.falId}/requests/${job.requestId}/status`,
-      { headers: falHeaders(falKey) },
-    )
+    const statusRes = await fetch(job.statusUrl || statusUrlFor(job.falId, job.requestId), {
+      headers: falAuth(falKey),
+    })
     const statusJson = (await statusRes.json().catch(() => null)) as {
       status?: string
+      response_url?: string
       error?: unknown
       detail?: unknown
     } | null
     const status = String(statusJson?.status || '').toUpperCase()
 
-    if (status === 'IN_QUEUE' || status === 'IN_PROGRESS') {
+    if (status === 'IN_QUEUE' || status === 'QUEUED' || status === 'IN_PROGRESS') {
       return Response.json({ pending: true, status: status === 'IN_PROGRESS' ? 'generating' : 'queued' })
     }
-    if (status && status !== 'COMPLETED') {
+    if (status !== 'COMPLETED') {
+      if (!status || statusRes.status === 404) {
+        if (Date.now() - job.started < 3 * 60 * 1000) {
+          return Response.json({ pending: true, status: 'queued' })
+        }
+      }
       if (isPolicyFail(statusRes.status, statusJson)) {
         return Response.json(
           {
@@ -412,15 +446,17 @@ export const genVideoPollEndpoint: Endpoint = {
       )
     }
 
-    const resultRes = await fetch(`https://queue.fal.run/${job.falId}/requests/${job.requestId}`, {
-      headers: falHeaders(falKey),
-    })
+    const resultUrl = statusJson?.response_url || job.responseUrl || responseUrlFor(job.falId, job.requestId)
+    const resultRes = await fetch(resultUrl, { headers: falAuth(falKey) })
     const resultJson = (await resultRes.json().catch(() => null)) as {
       video?: { url?: string; width?: number; height?: number; file_size?: number; content_type?: string; duration?: number }
+      response?: { video?: { url?: string; width?: number; height?: number; file_size?: number; duration?: number } }
+      data?: { video?: { url?: string; width?: number; height?: number; file_size?: number; duration?: number } }
       error?: unknown
       detail?: unknown
     } | null
-    if (!resultRes.ok || !resultJson?.video?.url) {
+    const video = resultJson?.video || resultJson?.response?.video || resultJson?.data?.video
+    if (!resultRes.ok || !video?.url) {
       if (isPolicyFail(resultRes.status, resultJson)) {
         return Response.json(
           {
@@ -458,7 +494,6 @@ export const genVideoPollEndpoint: Endpoint = {
       )
     }
 
-    const video = resultJson.video
     let storedUrl = video.url || ''
     let fileBytes = Number(video.file_size) || 0
     try {
