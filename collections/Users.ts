@@ -44,7 +44,7 @@ export const Users: CollectionConfig = {
       defaultValue: ['user'],
       options: ['user', 'admin'],
       access: {
-        create: () => false,
+        create: ({ req: { user } }) => isAdmin(user),
         update: ({ req: { user } }) => isAdmin(user),
       },
     },
