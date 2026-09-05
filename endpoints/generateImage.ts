@@ -4,7 +4,15 @@ import { stripeCheckoutEnabled } from './stripeWallet'
 
 const DAILY_LIMIT = 4
 
-type ModelKey = 'schnell' | 'banana2' | 'krea2'
+type ModelKey =
+  | 'schnell'
+  | 'flux2pro'
+  | 'banana2'
+  | 'bananapro'
+  | 'seedream45'
+  | 'seedream5lite'
+  | 'grok'
+  | 'krea2'
 type GenMode = 't2i' | 'i2i'
 
 type GenModel = {
@@ -28,13 +36,63 @@ const MODELS: Record<ModelKey, GenModel> = {
     free: true,
     modes: ['t2i'],
   },
+  flux2pro: {
+    key: 'flux2pro',
+    falId: 'fal-ai/flux-2-pro',
+    falEditId: 'fal-ai/flux-2-pro/edit',
+    label: 'Flux.2 Pro',
+    blurb: 'Photoreal detail',
+    priceCents: 8,
+    free: false,
+    modes: ['t2i', 'i2i'],
+  },
   banana2: {
     key: 'banana2',
     falId: 'fal-ai/nano-banana-2',
     falEditId: 'fal-ai/nano-banana-2/edit',
     label: 'Nano Banana 2',
-    blurb: 'Gemini · sharp text',
+    blurb: 'Sharp text',
     priceCents: 15,
+    free: false,
+    modes: ['t2i', 'i2i'],
+  },
+  bananapro: {
+    key: 'bananapro',
+    falId: 'fal-ai/nano-banana-pro',
+    falEditId: 'fal-ai/nano-banana-pro/edit',
+    label: 'Nano Banana Pro',
+    blurb: 'Studio quality',
+    priceCents: 25,
+    free: false,
+    modes: ['t2i', 'i2i'],
+  },
+  seedream45: {
+    key: 'seedream45',
+    falId: 'fal-ai/bytedance/seedream/v4.5/text-to-image',
+    falEditId: 'fal-ai/bytedance/seedream/v4.5/edit',
+    label: 'Seedream 4.5',
+    blurb: 'Strong prompt follow',
+    priceCents: 10,
+    free: false,
+    modes: ['t2i', 'i2i'],
+  },
+  seedream5lite: {
+    key: 'seedream5lite',
+    falId: 'fal-ai/bytedance/seedream/v5/lite/text-to-image',
+    falEditId: 'fal-ai/bytedance/seedream/v5/lite/edit',
+    label: 'Seedream 5 Lite',
+    blurb: 'Fast 2K stills',
+    priceCents: 8,
+    free: false,
+    modes: ['t2i', 'i2i'],
+  },
+  grok: {
+    key: 'grok',
+    falId: 'xai/grok-imagine-image',
+    falEditId: 'xai/grok-imagine-image/edit',
+    label: 'Grok Imagine',
+    blurb: 'High-fidelity stills',
+    priceCents: 6,
     free: false,
     modes: ['t2i', 'i2i'],
   },
@@ -86,31 +144,57 @@ function resolveAspect(body: { aspect?: unknown; imageSize?: unknown }) {
   return '1:1'
 }
 
+function fluxImageSize(aspect: string) {
+  if (aspect === '16:9') return 'landscape_16_9'
+  if (aspect === '9:16') return 'portrait_16_9'
+  if (aspect === '4:3') return 'landscape_4_3'
+  if (aspect === '3:4') return 'portrait_4_3'
+  return 'square_hd'
+}
+
+function seedreamImageSize(aspect: string) {
+  if (aspect === '16:9') return { width: 2560, height: 1440 }
+  if (aspect === '9:16') return { width: 1440, height: 2560 }
+  if (aspect === '4:3') return { width: 2304, height: 1728 }
+  if (aspect === '3:4') return { width: 1728, height: 2304 }
+  return { width: 2048, height: 2048 }
+}
+
 function falPayload(model: GenModel, prompt: string, aspect: string, seed?: number, imageUrl?: string) {
   const body: Record<string, unknown> = { prompt }
-  if (typeof seed === 'number') body.seed = seed
+  if (typeof seed === 'number' && model.key !== 'grok') body.seed = seed
+
   if (model.key === 'schnell') {
-    body.image_size =
-      aspect === '16:9'
-        ? 'landscape_16_9'
-        : aspect === '9:16'
-          ? 'portrait_16_9'
-          : aspect === '4:3'
-            ? 'landscape_4_3'
-            : aspect === '3:4'
-              ? 'portrait_4_3'
-              : 'square_hd'
+    body.image_size = fluxImageSize(aspect)
     body.num_images = 1
     body.num_inference_steps = 4
     body.enable_safety_checker = true
     body.output_format = 'jpeg'
-  } else if (model.key === 'banana2') {
+  } else if (model.key === 'flux2pro') {
+    body.image_size = imageUrl ? 'auto' : fluxImageSize(aspect)
+    body.enable_safety_checker = true
+    body.safety_tolerance = '2'
+    body.output_format = 'jpeg'
+    if (imageUrl) body.image_urls = [imageUrl]
+  } else if (model.key === 'banana2' || model.key === 'bananapro') {
     body.num_images = 1
     body.aspect_ratio = aspect
     body.output_format = 'jpeg'
     body.safety_tolerance = '4'
     body.resolution = '1K'
     body.limit_generations = true
+    if (imageUrl) body.image_urls = [imageUrl]
+  } else if (model.key === 'seedream45' || model.key === 'seedream5lite') {
+    body.image_size = seedreamImageSize(aspect)
+    body.num_images = 1
+    body.max_images = 1
+    body.enable_safety_checker = true
+    if (imageUrl) body.image_urls = [imageUrl]
+  } else if (model.key === 'grok') {
+    body.num_images = 1
+    body.aspect_ratio = imageUrl ? 'auto' : aspect
+    body.resolution = '1k'
+    body.output_format = 'jpeg'
     if (imageUrl) body.image_urls = [imageUrl]
   } else {
     body.aspect_ratio = aspect === '3:4' ? '4:5' : aspect
