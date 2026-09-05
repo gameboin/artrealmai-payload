@@ -47,12 +47,14 @@ export const SavedLogos: CollectionConfig = {
       name: 'thumb',
       type: 'textarea',
       required: true,
+      maxLength: 8000000,
       admin: { hidden: true },
     },
     {
       name: 'dataUrl',
       type: 'textarea',
       required: true,
+      maxLength: 8000000,
       admin: { hidden: true },
     },
     {
