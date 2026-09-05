@@ -29,7 +29,7 @@ export const SavedLogos: CollectionConfig = {
       async ({ req, operation, data }) => {
         if (operation === 'create' && req.user) {
           const existing = await req.payload.count({
-            collection: 'saved-logos',
+            collection: 'saved-logos' as never,
             where: { user: { equals: req.user.id } },
             overrideAccess: true,
           })
