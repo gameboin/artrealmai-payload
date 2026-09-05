@@ -6,7 +6,9 @@ function isAdmin(user: unknown) {
 
 export const Users: CollectionConfig = {
   slug: 'users',
-  auth: true,
+  auth: {
+    useAPIKey: true,
+  },
   access: {
     read: ({ req: { user } }) => {
       if (!user) return false
