@@ -7,6 +7,7 @@ import { Authors } from './Authors'
 import { GlossaryTerms } from './GlossaryTerms'
 import { PromptStyles } from './PromptStyles'
 import { SavedPrompts } from './SavedPrompts'
+import { SavedLogos } from './SavedLogos'
 // 1. Import the new Contact Submissions collection
 import { ContactSubmissions } from './ContactSubmissions'
 import { Generations } from './Generations'
@@ -24,6 +25,7 @@ export const collections = [
   GlossaryTerms,
   PromptStyles,
   SavedPrompts,
+  SavedLogos,
   // 2. Register the collection in the export array
   ContactSubmissions,
 ]
