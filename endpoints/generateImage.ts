@@ -2,6 +2,7 @@ import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { stripeCheckoutEnabled } from './stripeWallet'
 import { publicVideoModels } from './generateVideo'
+import { userIsGenAdmin } from '../lib/genAdmin'
 
 const DAILY_LIMIT = 4
 
@@ -466,6 +467,7 @@ export const genStatusEndpoint: Endpoint = {
     const remaining = Math.max(0, DAILY_LIMIT - used)
     const balanceCents = Number(genUser.genBalanceCents) || 0
     const cheapestPaid = Math.min(...Object.values(MODELS).map((m) => m.priceCents))
+    const adminComp = await userIsGenAdmin(req)
     return Response.json({
       enabled: Boolean(process.env.FAL_KEY),
       model: MODELS.schnell.label,
@@ -487,7 +489,8 @@ export const genStatusEndpoint: Endpoint = {
       priceCents: MODELS.schnell.priceCents,
       stripeEnabled: stripeCheckoutEnabled(),
       packs: [5, 15, 40, 100, 500],
-      canGenerate: remaining > 0 || balanceCents >= cheapestPaid,
+      adminComp,
+      canGenerate: adminComp || remaining > 0 || balanceCents >= cheapestPaid,
     })
   },
 }
@@ -721,8 +724,9 @@ export const genImageEndpoint: Endpoint = {
     const remainingFree = Math.max(0, DAILY_LIMIT - used)
     const genUser = await loadGenUser(req, userId)
     const balanceCents = Number(genUser.genBalanceCents) || 0
-    const useFree = model.free && mode === 't2i' && remainingFree > 0
-    if (!useFree && balanceCents < model.priceCents) {
+    const adminComp = await userIsGenAdmin(req)
+    const useFree = !adminComp && model.free && mode === 't2i' && remainingFree > 0
+    if (!adminComp && !useFree && balanceCents < model.priceCents) {
       const hint = model.free
         ? `Daily free gens are used. Add funds to keep generating ($${(model.priceCents / 100).toFixed(2)} each).`
         : `${model.label} is $${(model.priceCents / 100).toFixed(2)} each. Add funds to generate.`
@@ -757,7 +761,8 @@ export const genImageEndpoint: Endpoint = {
     if (outcome === 'filtered' || outcome === 'rejected') {
       const nextFiltered = filteredToday(genUser) + (outcome === 'filtered' ? 1 : 0)
       const nextRejects = rejectsToday(genUser) + (outcome === 'rejected' ? 1 : 0)
-      const nextPenalties = penaltySlotsForToday(genUser) + (outcome === 'filtered' && useFree ? 1 : 0)
+      const nextPenalties =
+        penaltySlotsForToday(genUser) + (outcome === 'filtered' && useFree && !adminComp ? 1 : 0)
       await saveSafetyDay(req, userId, {
         filtered: nextFiltered,
         rejects: nextRejects,
@@ -766,7 +771,7 @@ export const genImageEndpoint: Endpoint = {
 
       let chargedCents = 0
       let nextBalance = balanceCents
-      if (outcome === 'filtered' && !useFree) {
+      if (outcome === 'filtered' && !useFree && !adminComp) {
         chargedCents = model.priceCents
         nextBalance = Math.max(0, balanceCents - model.priceCents)
         await req.payload.update({
@@ -781,7 +786,9 @@ export const genImageEndpoint: Endpoint = {
       const remaining = Math.max(0, DAILY_LIMIT - usedAfter)
       let message = REJECTED_LEAD
       if (outcome === 'filtered') {
-        if (useFree) {
+        if (adminComp) {
+          message = `${FILTERED_LEAD} Admin account · not charged.`
+        } else if (useFree) {
           message = `${FILTERED_LEAD} Used 1 free gen. ${remaining} left today.`
         } else {
           message = `${FILTERED_LEAD} Used 1 ${model.label} gen (${money(model.priceCents)}). Balance ${money(nextBalance)}.`
@@ -846,7 +853,9 @@ export const genImageEndpoint: Endpoint = {
     let chargedCents = 0
     let nextBalance = balanceCents
     let remaining = remainingFree
-    if (useFree) {
+    if (adminComp) {
+      remaining = remainingFree
+    } else if (useFree) {
       remaining = Math.max(0, remainingFree - 1)
     } else {
       chargedCents = model.priceCents
@@ -900,6 +909,7 @@ export const genImageEndpoint: Endpoint = {
       balanceCents: nextBalance,
       chargedCents,
       priceCents: model.priceCents,
+      adminComp,
     })
   },
 }

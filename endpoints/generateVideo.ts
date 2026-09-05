@@ -2,6 +2,7 @@ import { createHmac } from 'crypto'
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { stripeCheckoutEnabled } from './stripeWallet'
+import { userIsGenAdmin } from '../lib/genAdmin'
 
 type VideoKey = 'grokvid' | 'h3turbo'
 type VideoMode = 't2v' | 'i2v'
@@ -227,6 +228,7 @@ export const genVideoStatusEndpoint: Endpoint = {
       depth: 0,
       overrideAccess: true,
     })) as { genBalanceCents?: number | null }
+    const adminComp = await userIsGenAdmin(req)
     return Response.json({
       enabled: Boolean(process.env.FAL_KEY),
       models: publicVideoModels(),
@@ -236,6 +238,7 @@ export const genVideoStatusEndpoint: Endpoint = {
       ],
       balanceCents: Number(user.genBalanceCents) || 0,
       stripeEnabled: stripeCheckoutEnabled(),
+      adminComp,
     })
   },
 }
@@ -292,6 +295,7 @@ export const genVideoStartEndpoint: Endpoint = {
     }
 
     const userId = String(req.user.id)
+    const adminComp = await userIsGenAdmin(req)
     const user = (await req.payload.findByID({
       collection: 'users',
       id: userId,
@@ -299,7 +303,7 @@ export const genVideoStartEndpoint: Endpoint = {
       overrideAccess: true,
     })) as { genBalanceCents?: number | null }
     const balanceCents = Number(user.genBalanceCents) || 0
-    if (balanceCents < priceCents) {
+    if (!adminComp && balanceCents < priceCents) {
       return Response.json(
         {
           message: `${model.label} is ${money(priceCents)} for ${duration}s. Add funds to generate.`,
@@ -533,6 +537,7 @@ export const genVideoPollEndpoint: Endpoint = {
 
     const model = VIDEO_MODELS[job.model]
     const userId = job.userId
+    const adminComp = await userIsGenAdmin(req)
     const user = (await req.payload.findByID({
       collection: 'users',
       id: userId,
@@ -540,7 +545,7 @@ export const genVideoPollEndpoint: Endpoint = {
       overrideAccess: true,
     })) as { genBalanceCents?: number | null }
     const balanceCents = Number(user.genBalanceCents) || 0
-    if (balanceCents < job.priceCents) {
+    if (!adminComp && balanceCents < job.priceCents) {
       return Response.json(
         {
           message: `${model.label} is ${money(job.priceCents)} for ${job.duration}s. Add funds to generate.`,
@@ -572,13 +577,18 @@ export const genVideoPollEndpoint: Endpoint = {
       )
     }
 
-    const nextBalance = Math.max(0, balanceCents - job.priceCents)
-    await req.payload.update({
-      collection: 'users',
-      id: userId,
-      overrideAccess: true,
-      data: { genBalanceCents: nextBalance } as never,
-    })
+    let chargedCents = 0
+    let nextBalance = balanceCents
+    if (!adminComp) {
+      chargedCents = job.priceCents
+      nextBalance = Math.max(0, balanceCents - job.priceCents)
+      await req.payload.update({
+        collection: 'users',
+        id: userId,
+        overrideAccess: true,
+        data: { genBalanceCents: nextBalance } as never,
+      })
+    }
 
     const doc = (await req.payload.create({
       collection: 'generations' as never,
@@ -595,7 +605,7 @@ export const genVideoPollEndpoint: Endpoint = {
         height: video.height,
         format: 'MP4',
         bytes: fileBytes || undefined,
-        chargedCents: job.priceCents,
+        chargedCents,
         durationMs: Date.now() - job.started,
         kind: 'video',
         durationSec: job.duration,
@@ -621,9 +631,10 @@ export const genVideoPollEndpoint: Endpoint = {
       durationSec: job.duration,
       resolution: job.resolution,
       createdAt: doc.createdAt || new Date().toISOString(),
-      chargedCents: job.priceCents,
+      chargedCents,
       priceCents: job.priceCents,
       balanceCents: nextBalance,
+      adminComp,
     })
   },
 }
