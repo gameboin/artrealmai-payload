@@ -520,6 +520,9 @@ export const genListEndpoint: Endpoint = {
           bytes?: number | null
           chargedCents?: number | null
           durationMs?: number | null
+          kind?: string | null
+          durationSec?: number | null
+          resolution?: string | null
           createdAt?: string
         }
         return {
@@ -537,6 +540,9 @@ export const genListEndpoint: Endpoint = {
           bytes: row.bytes,
           chargedCents: row.chargedCents,
           durationMs: row.durationMs,
+          kind: row.kind || 'image',
+          durationSec: row.durationSec,
+          resolution: row.resolution,
           createdAt: row.createdAt,
         }
       }),
@@ -563,7 +569,7 @@ export const genFileEndpoint: Endpoint = {
         id,
         depth: 0,
         overrideAccess: true,
-      })) as { url?: string; user?: string | { id?: string } }
+      })) as { url?: string; user?: string | { id?: string }; kind?: string; format?: string }
 
       const ownerId = typeof doc.user === 'string' ? doc.user : doc.user?.id
       const isAdmin = Array.isArray((req.user as { roles?: string[] }).roles)
@@ -577,10 +583,13 @@ export const genFileEndpoint: Endpoint = {
         return Response.redirect(doc.url, 302)
       }
 
+      const isVideo = doc.kind === 'video' || (doc.format || '').toUpperCase() === 'MP4'
+      const filename = isVideo ? 'artrealmai-gen.mp4' : 'artrealmai-gen.jpg'
       return new Response(upstream.body, {
         headers: {
-          'Content-Type': upstream.headers.get('content-type') || 'image/jpeg',
-          'Content-Disposition': 'attachment; filename="artrealmai-gen.jpg"',
+          'Content-Type':
+            upstream.headers.get('content-type') || (isVideo ? 'video/mp4' : 'image/jpeg'),
+          'Content-Disposition': `attachment; filename="${filename}"`,
           'Cache-Control': 'private, max-age=3600',
         },
       })

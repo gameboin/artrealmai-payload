@@ -36,5 +36,8 @@ export const Generations: CollectionConfig = {
     { name: 'bytes', type: 'number' },
     { name: 'chargedCents', type: 'number' },
     { name: 'durationMs', type: 'number' },
+    { name: 'kind', type: 'text', defaultValue: 'image' },
+    { name: 'durationSec', type: 'number' },
+    { name: 'resolution', type: 'text' },
   ],
 }

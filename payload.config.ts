@@ -18,6 +18,7 @@ import { DownloadBlock } from './blocks/DownloadBlock'
 import { googleAuthEndpoints } from './endpoints/googleAuth'
 import { fileDownloadEndpoint } from './endpoints/fileDownload'
 import { generateImageEndpoints } from './endpoints/generateImage'
+import { generateVideoEndpoints } from './endpoints/generateVideo'
 import { stripeWalletEndpoints } from './endpoints/stripeWallet' 
 
 const filename = fileURLToPath(import.meta.url)
@@ -30,7 +31,7 @@ export default buildConfig({
   },
 
   collections: collections,
-  endpoints: [...googleAuthEndpoints, fileDownloadEndpoint, ...generateImageEndpoints, ...stripeWalletEndpoints], 
+  endpoints: [...googleAuthEndpoints, fileDownloadEndpoint, ...generateImageEndpoints, ...generateVideoEndpoints, ...stripeWalletEndpoints], 
 
   globals: [
     GlossaryImporter,
