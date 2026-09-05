@@ -16,6 +16,7 @@ type VideoModel = {
   modes: VideoMode[]
   durations: number[]
   resolutions: { id: string; label: string }[]
+  aspects: string[]
   pricePerSec: Record<string, number>
   defaultDuration: number
   defaultResolution: string
@@ -34,6 +35,7 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
       { id: '480p', label: '480p' },
       { id: '720p', label: '720p' },
     ],
+    aspects: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
     pricePerSec: { '480p': 8, '720p': 12 },
     defaultDuration: 5,
     defaultResolution: '480p',
@@ -50,6 +52,7 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
       { id: '480P', label: '480p' },
       { id: '768P', label: '768p' },
     ],
+    aspects: ['1:1', '16:9', '9:16', '4:3', '3:4'],
     pricePerSec: { '480P': 5, '768P': 8 },
     defaultDuration: 5,
     defaultResolution: '480P',
@@ -57,7 +60,7 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
 }
 
 const MAX_SOURCE_BYTES = 4 * 1024 * 1024
-const ASPECTS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4'])
+const ASPECTS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'])
 
 type JobPayload = {
   requestId: string
@@ -84,6 +87,7 @@ export function publicVideoModels() {
     modes: m.modes,
     durations: m.durations,
     resolutions: m.resolutions,
+    aspects: m.aspects,
     pricePerSec: m.pricePerSec,
     defaultDuration: m.defaultDuration,
     defaultResolution: m.defaultResolution,
@@ -203,7 +207,7 @@ function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect
     body.resolution = resolution
     body.enable_safety_checker = true
     body.prompt_expansion_mode = 'balanced'
-    if (mode === 't2v') body.aspect_ratio = aspect === '3:4' ? '3:4' : aspect
+    if (mode === 't2v') body.aspect_ratio = aspect
     if (imageUrl) body.image_url = imageUrl
   }
   return body
@@ -279,7 +283,12 @@ export const genVideoStartEndpoint: Endpoint = {
 
     const model = resolveVideoModel(body.model)
     const mode: VideoMode = body.mode === 'i2v' ? 'i2v' : 't2v'
-    const aspect = typeof body.aspect === 'string' && ASPECTS.has(body.aspect) ? body.aspect : '16:9'
+    const requestedAspect = typeof body.aspect === 'string' && ASPECTS.has(body.aspect) ? body.aspect : '16:9'
+    const aspect = model.aspects.includes(requestedAspect)
+      ? requestedAspect
+      : model.aspects.includes('16:9')
+        ? '16:9'
+        : model.aspects[0]
     const duration = Math.round(Number(body.duration))
     const resolution = typeof body.resolution === 'string' ? body.resolution : model.defaultResolution
     if (!model.durations.includes(duration)) {

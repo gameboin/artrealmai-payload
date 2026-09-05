@@ -111,7 +111,8 @@ const MODELS: Record<ModelKey, GenModel> = {
 
 const MAX_SOURCE_BYTES = 4 * 1024 * 1024
 
-const ASPECTS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4'])
+const IMAGE_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'] as const
+const ASPECTS = new Set<string>(IMAGE_ASPECTS)
 const LEGACY_SIZE_TO_ASPECT: Record<string, string> = {
   square_hd: '1:1',
   square: '1:1',
@@ -129,6 +130,7 @@ function publicModels() {
     priceCents: m.priceCents,
     free: m.free,
     modes: m.modes,
+    aspects: [...IMAGE_ASPECTS],
   }))
 }
 
@@ -151,6 +153,8 @@ function fluxImageSize(aspect: string) {
   if (aspect === '9:16') return 'portrait_16_9'
   if (aspect === '4:3') return 'landscape_4_3'
   if (aspect === '3:4') return 'portrait_4_3'
+  if (aspect === '3:2') return { width: 1152, height: 768 }
+  if (aspect === '2:3') return { width: 768, height: 1152 }
   return 'square_hd'
 }
 
@@ -159,6 +163,8 @@ function seedreamImageSize(aspect: string) {
   if (aspect === '9:16') return { width: 1440, height: 2560 }
   if (aspect === '4:3') return { width: 2304, height: 1728 }
   if (aspect === '3:4') return { width: 1728, height: 2304 }
+  if (aspect === '3:2') return { width: 2304, height: 1536 }
+  if (aspect === '2:3') return { width: 1536, height: 2304 }
   return { width: 2048, height: 2048 }
 }
 
