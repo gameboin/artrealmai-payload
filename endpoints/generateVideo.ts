@@ -28,7 +28,7 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
     falT2v: 'xai/grok-imagine-video/text-to-video',
     falI2v: 'xai/grok-imagine-video/image-to-video',
     modes: ['t2v', 'i2v'],
-    durations: [5, 6, 8, 10],
+    durations: [5, 6, 8, 10, 15],
     resolutions: [
       { id: '480p', label: '480p' },
       { id: '720p', label: '720p' },
@@ -44,7 +44,7 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
     falT2v: 'minimax/h3-max-turbo/text-to-video',
     falI2v: 'minimax/h3-max-turbo/image-to-video',
     modes: ['t2v', 'i2v'],
-    durations: [5, 6, 8, 10],
+    durations: [5, 6, 8, 10, 15],
     resolutions: [
       { id: '480P', label: '480p' },
       { id: '768P', label: '768p' },
@@ -280,7 +280,7 @@ export const genVideoStartEndpoint: Endpoint = {
     const duration = Math.round(Number(body.duration))
     const resolution = typeof body.resolution === 'string' ? body.resolution : model.defaultResolution
     if (!model.durations.includes(duration)) {
-      return Response.json({ message: 'Pick a duration of 5, 6, 8, or 10 seconds.' }, { status: 400 })
+      return Response.json({ message: 'Pick a duration of 5, 6, 8, 10, or 15 seconds.' }, { status: 400 })
     }
     if (!model.resolutions.some((r) => r.id === resolution)) {
       return Response.json({ message: 'Pick a supported resolution.' }, { status: 400 })
