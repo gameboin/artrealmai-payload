@@ -509,18 +509,34 @@ export const genListEndpoint: Endpoint = {
           id: string
           prompt?: string
           model?: string
+          modelId?: string | null
+          mode?: string | null
           url?: string
           seed?: number | null
           imageSize?: string | null
+          width?: number | null
+          height?: number | null
+          format?: string | null
+          bytes?: number | null
+          chargedCents?: number | null
+          durationMs?: number | null
           createdAt?: string
         }
         return {
           id: row.id,
           prompt: row.prompt,
           model: row.model,
+          modelId: row.modelId,
+          mode: row.mode,
           url: row.url,
           seed: row.seed,
           imageSize: row.imageSize,
+          width: row.width,
+          height: row.height,
+          format: row.format,
+          bytes: row.bytes,
+          chargedCents: row.chargedCents,
+          durationMs: row.durationMs,
           createdAt: row.createdAt,
         }
       }),
@@ -711,6 +727,7 @@ export const genImageEndpoint: Endpoint = {
     }
 
     const falId = mode === 'i2i' ? model.falEditId || model.falId : model.falId
+    const started = Date.now()
     const falRes = await fetch(`https://fal.run/${falId}`, {
       method: 'POST',
       headers: {
@@ -794,33 +811,23 @@ export const genImageEndpoint: Endpoint = {
     }
 
     let storedUrl = image.url
+    let fileBytes = 0
+    let fileFormat = 'JPEG'
     try {
       const fileRes = await fetch(image.url)
       if (fileRes.ok) {
         const bytes = Buffer.from(await fileRes.arrayBuffer())
         const contentType = fileRes.headers.get('content-type') || 'image/jpeg'
-        const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg'
+        fileBytes = bytes.length
+        fileFormat = contentType.includes('png') ? 'PNG' : contentType.includes('webp') ? 'WEBP' : 'JPEG'
+        const ext = fileFormat === 'PNG' ? 'png' : fileFormat === 'WEBP' ? 'webp' : 'jpg'
         const name = `${userId}-${Date.now()}.${ext}`
         storedUrl = (await persistToR2(bytes, name, contentType)) || image.url
       }
     } catch {
       storedUrl = image.url
     }
-
-    const doc = (await req.payload.create({
-      collection: 'generations' as never,
-      overrideAccess: true,
-      data: {
-        user: userId,
-        prompt,
-        model: model.label,
-        imageSize: aspect,
-        seed: typeof falJson?.seed === 'number' ? falJson.seed : seed,
-        url: storedUrl,
-        width: image.width,
-        height: image.height,
-      } as never,
-    })) as { id: string }
+    const durationMs = Date.now() - started
 
     let chargedCents = 0
     let nextBalance = balanceCents
@@ -838,12 +845,43 @@ export const genImageEndpoint: Endpoint = {
       })
     }
 
+    const usedSeed = typeof falJson?.seed === 'number' ? falJson.seed : seed
+    const doc = (await req.payload.create({
+      collection: 'generations' as never,
+      overrideAccess: true,
+      data: {
+        user: userId,
+        prompt,
+        model: model.label,
+        modelId: model.key,
+        mode,
+        imageSize: aspect,
+        seed: usedSeed,
+        url: storedUrl,
+        width: image.width,
+        height: image.height,
+        format: fileFormat,
+        bytes: fileBytes || undefined,
+        chargedCents,
+        durationMs,
+      } as never,
+    })) as { id: string; createdAt?: string }
+
     return Response.json({
       id: doc.id,
       url: storedUrl,
-      seed: typeof falJson?.seed === 'number' ? falJson.seed : seed,
+      seed: usedSeed,
+      prompt,
       model: model.label,
       modelId: model.key,
+      mode,
+      imageSize: aspect,
+      width: image.width,
+      height: image.height,
+      format: fileFormat,
+      bytes: fileBytes || undefined,
+      durationMs,
+      createdAt: doc.createdAt || new Date().toISOString(),
       remaining,
       balanceCents: nextBalance,
       chargedCents,
