@@ -205,7 +205,7 @@ function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect
     if (imageUrl) body.image_url = imageUrl
   } else {
     body.resolution = resolution
-    body.enable_safety_checker = true
+    body.enable_safety_checker = false
     body.prompt_expansion_mode = 'balanced'
     if (mode === 't2v') body.aspect_ratio = aspect
     if (imageUrl) body.image_url = imageUrl
