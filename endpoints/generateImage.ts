@@ -10,6 +10,7 @@ const DAILY_LIMIT = 4
 type ModelKey =
   | 'schnell'
   | 'flux2pro'
+  | 'flux2klein9b'
   | 'banana2'
   | 'bananapro'
   | 'seedream45'
@@ -63,6 +64,22 @@ const MODELS: Record<ModelKey, GenModel> = {
     resolutions: [
       { id: '1K', label: '1K', priceCents: 8 },
       { id: '2K', label: '2K', priceCents: 15 },
+    ],
+    defaultResolution: '1K',
+  },
+  flux2klein9b: {
+    key: 'flux2klein9b',
+    falId: 'fal-ai/flux-2/klein/9b',
+    falEditId: 'fal-ai/flux-2/klein/9b/edit',
+    label: 'Flux.2 Klein 9B',
+    blurb: 'Fast Flux.2 stills',
+    priceCents: 5,
+    free: false,
+    modes: ['t2i', 'i2i'],
+    aspects: [...COMMON_ASPECTS],
+    resolutions: [
+      { id: '1K', label: '1K', priceCents: 5 },
+      { id: '2K', label: '2K', priceCents: 10 },
     ],
     defaultResolution: '1K',
   },
@@ -288,6 +305,13 @@ function falPayload(
     body.image_size = imageUrl && resolution !== '2K' ? 'auto' : fluxImageSize(aspect, resolution)
     body.enable_safety_checker = true
     body.safety_tolerance = '2'
+    body.output_format = 'jpeg'
+    if (imageUrl) body.image_urls = [imageUrl]
+  } else if (model.key === 'flux2klein9b') {
+    body.image_size = fluxImageSize(aspect, resolution)
+    body.num_images = 1
+    body.num_inference_steps = 4
+    body.enable_safety_checker = true
     body.output_format = 'jpeg'
     if (imageUrl) body.image_urls = [imageUrl]
   } else if (model.key === 'banana2' || model.key === 'bananapro') {
