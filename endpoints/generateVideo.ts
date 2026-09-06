@@ -3,6 +3,7 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { stripeCheckoutEnabled } from './stripeWallet'
 import { userIsGenAdmin } from '../lib/genAdmin'
+import { randomFileName } from '../lib/randomFile'
 
 type VideoKey = 'grokvid' | 'h3turbo'
 type VideoMode = 't2v' | 'i2v'
@@ -106,7 +107,9 @@ function money(cents: number) {
 }
 
 function jobSecret() {
-  return process.env.PAYLOAD_SECRET || process.env.FAL_KEY || 'artrealm-video-test'
+  const secret = process.env.PAYLOAD_SECRET || process.env.FAL_KEY || ''
+  if (!secret) throw new Error('Missing signing secret')
+  return secret
 }
 
 function signJob(data: JobPayload) {
@@ -334,7 +337,7 @@ export const genVideoStartEndpoint: Endpoint = {
         )
       }
       sourceUrl =
-        (await persistToR2(parsed.buffer, `${userId}-${Date.now()}.${parsed.ext}`, parsed.contentType, 'gens/in')) ||
+        (await persistToR2(parsed.buffer, randomFileName(parsed.ext), parsed.contentType, 'gens/in')) ||
         ''
       if (!sourceUrl) {
         return Response.json({ message: 'Could not store the source image. Try a smaller file.' }, { status: 502 })
@@ -574,7 +577,7 @@ export const genVideoPollEndpoint: Endpoint = {
         const bytes = Buffer.from(await fileRes.arrayBuffer())
         fileBytes = bytes.length
         storedUrl =
-          (await persistToR2(bytes, `${userId}-${Date.now()}.mp4`, 'video/mp4')) || storedUrl
+          (await persistToR2(bytes, randomFileName('mp4'), 'video/mp4')) || storedUrl
       }
     } catch {
       storedUrl = video.url || storedUrl

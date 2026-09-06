@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { adminOnly } from '../lib/access'
 
 export const Files: CollectionConfig = {
   slug: 'files',
@@ -21,9 +22,9 @@ export const Files: CollectionConfig = {
   },
   access: {
     read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

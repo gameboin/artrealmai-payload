@@ -1,4 +1,5 @@
 import { CollectionConfig } from 'payload'
+import { adminOnly } from '../lib/access'
 
 export const GlossaryTerms: CollectionConfig = {
   slug: 'glossary-terms',
@@ -7,13 +8,10 @@ export const GlossaryTerms: CollectionConfig = {
     defaultColumns: ['term', 'updatedAt'],
   },
   access: {
-    // 1. PUBLIC READ ACCESS: This is the critical line.
-    read: () => true, 
-    
-    // 2. RESTRICTED WRITE ACCESS: Only logged-in users (Admins) can edit
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    read: () => true,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

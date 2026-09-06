@@ -24,10 +24,37 @@ import { stripeWalletEndpoints } from './endpoints/stripeWallet'
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
+const payloadSecret = process.env.PAYLOAD_SECRET || ''
+if (!payloadSecret && process.env.VERCEL) {
+  throw new Error('PAYLOAD_SECRET is required')
+}
+
+const siteOrigins = ['https://artrealmai.com', 'https://www.artrealmai.com']
+const localOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5500',
+  'http://127.0.0.1:5500',
+  'http://127.0.0.1:8080',
+  'http://localhost:8080',
+]
+const vercelOrigins = [
+  process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '',
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '',
+].filter(Boolean)
+const corsOrigins = [
+  ...siteOrigins,
+  ...vercelOrigins,
+  ...(process.env.VERCEL_ENV === 'production' ? [] : localOrigins),
+]
+
 export default buildConfig({
   admin: {
     user: 'users',
     importMap: { baseDir: path.resolve(dirname) },
+  },
+
+  graphQL: {
+    disable: true,
   },
 
   collections: collections,
@@ -50,37 +77,13 @@ export default buildConfig({
     ],
   }),
 
-  secret: process.env.PAYLOAD_SECRET || 'fallback-secret',
+  secret: payloadSecret || 'dev-only-not-for-production',
   typescript: { outputFile: path.resolve(dirname, 'src/payload-types.ts') },
   db: mongooseAdapter({ url: process.env.DATABASE_URI || '' }),
   sharp,
 
-  cors: [
-    'https://artrealmai.com',
-    'https://www.artrealmai.com',
-    'http://localhost:3000',
-    'http://localhost:5500',
-    'http://127.0.0.1:5500',
-    'http://127.0.0.1:8080',
-    'http://localhost:8080',
-    // Allow Vercel URLs automatically
-    process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '',
-    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '',
-  ].filter(Boolean),
-  
-  csrf: [
-    'https://artrealmai.com',
-    'https://www.artrealmai.com',
-    'http://localhost:3000',
-    'http://localhost:5500',
-    'http://127.0.0.1:5500',
-    'http://127.0.0.1:8080',
-    'http://localhost:8080',
-    'https://artrealmai-payload.onrender.com',
-    // Allow Vercel URLs automatically
-    process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '',
-    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '',
-  ].filter(Boolean),
+  cors: corsOrigins,
+  csrf: [...corsOrigins, 'https://artrealmai-payload.onrender.com'].filter(Boolean),
 
   plugins: [
     s3Storage({

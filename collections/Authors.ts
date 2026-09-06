@@ -1,5 +1,6 @@
 // collections/Authors.ts
 import { CollectionConfig } from 'payload'
+import { adminOnly } from '../lib/access'
 import { applySlug } from '../lib/slug'
 
 export const Authors: CollectionConfig = {
@@ -14,9 +15,9 @@ export const Authors: CollectionConfig = {
   },
   access: {
     read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     { name: 'name', type: 'text', required: true },

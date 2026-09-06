@@ -1,4 +1,7 @@
-import type { CollectionConfig } from 'payload'
+import { APIError, type CollectionConfig } from 'payload'
+import { adminOnly, isAdmin, loggedIn } from '../lib/access'
+
+const USER_UPLOAD_MAX = 2 * 1024 * 1024
 
 export const Media: CollectionConfig = {
   slug: 'media',
@@ -37,9 +40,25 @@ export const Media: CollectionConfig = {
   },
   access: {
     read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    create: loggedIn,
+    update: adminOnly,
+    delete: adminOnly,
+  },
+  hooks: {
+    beforeChange: [
+      ({ req, operation, data }) => {
+        if (operation !== 'create' || isAdmin(req.user)) return
+        const file = req.file as { mimetype?: string; mimeType?: string; size?: number; filesize?: number } | undefined
+        const mime = String(file?.mimetype || file?.mimeType || data?.mimeType || '')
+        const size = Number(file?.size || file?.filesize || data?.filesize || 0)
+        if (mime && !mime.startsWith('image/')) {
+          throw new APIError('Account uploads must be images.', 400)
+        }
+        if (size > USER_UPLOAD_MAX) {
+          throw new APIError('Images must be under 2 MB.', 400)
+        }
+      },
+    ],
   },
   fields: [
     { 

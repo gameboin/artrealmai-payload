@@ -36,12 +36,9 @@ export const SavedPrompts: CollectionConfig = {
       index: true, 
       hooks: {
         beforeChange: [
-          ({ req, operation, value }) => {
-            // Force the logged-in user to be the owner
-            if (operation === 'create' && req.user) {
-              return req.user.id;
-            }
-            return value;
+          ({ req, value }) => {
+            if (req.user) return req.user.id
+            return value
           },
         ],
       },

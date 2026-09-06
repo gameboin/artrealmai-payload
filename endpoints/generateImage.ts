@@ -3,6 +3,7 @@ import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'pay
 import { stripeCheckoutEnabled } from './stripeWallet'
 import { publicVideoModels } from './generateVideo'
 import { userIsGenAdmin } from '../lib/genAdmin'
+import { randomFileName } from '../lib/randomFile'
 
 const DAILY_LIMIT = 4
 
@@ -720,7 +721,7 @@ export const genImageEndpoint: Endpoint = {
         )
       }
       sourceUrl =
-        (await persistToR2(parsed.buffer, `${userId}-${Date.now()}.${parsed.ext}`, parsed.contentType, 'gens/in')) || ''
+        (await persistToR2(parsed.buffer, randomFileName(parsed.ext), parsed.contentType, 'gens/in')) || ''
       if (!sourceUrl) {
         return Response.json({ message: 'Could not store the source image. Try a smaller file.' }, { status: 502 })
       }
@@ -848,7 +849,7 @@ export const genImageEndpoint: Endpoint = {
         fileBytes = bytes.length
         fileFormat = contentType.includes('png') ? 'PNG' : contentType.includes('webp') ? 'WEBP' : 'JPEG'
         const ext = fileFormat === 'PNG' ? 'png' : fileFormat === 'WEBP' ? 'webp' : 'jpg'
-        const name = `${userId}-${Date.now()}.${ext}`
+        const name = randomFileName(ext)
         storedUrl = (await persistToR2(bytes, name, contentType)) || image.url
       }
     } catch {

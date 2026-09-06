@@ -8,6 +8,20 @@ const __dirname = path.dirname(__filename)
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['payload'],
+
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        ],
+      },
+    ]
+  },
   
   // ADDED: Increase upload limit for Payload Admin (Server Actions)
   experimental: {

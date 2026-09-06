@@ -56,7 +56,6 @@ function publicUser(user: AuthUser) {
     email: user.email,
     name: user.name,
     avatar: user.avatar,
-    roles: user.roles,
   }
 }
 
@@ -97,39 +96,67 @@ const postGoogleAuth: Endpoint = {
       const email = String(info.email).toLowerCase()
       const displayName = (info.name || info.given_name || email.split('@')[0] || 'Creator').trim()
 
-      const existing = await payload.find({
+      const byGoogle = await payload.find({
         collection: 'users',
         limit: 1,
         depth: 1,
         overrideAccess: true,
-        where: {
-          or: [{ googleId: { equals: info.sub } }, { email: { equals: email } }],
-        },
+        where: { googleId: { equals: info.sub } },
       })
 
-      let user = existing.docs[0] as unknown as AuthUser | undefined
+      let user = byGoogle.docs[0] as unknown as AuthUser | undefined
+      let created = false
 
       if (!user) {
-        user = (await payload.create({
+        const byEmail = await payload.find({
           collection: 'users',
-          overrideAccess: true,
+          limit: 1,
           depth: 1,
-          data: {
-            email,
-            name: displayName,
-            googleId: info.sub,
-            password: randomBytes(32).toString('hex'),
-            roles: ['user'],
-          } as never,
-        })) as unknown as AuthUser
-      } else if (!user.googleId) {
-        user = (await payload.update({
-          collection: 'users',
-          id: user.id,
           overrideAccess: true,
-          depth: 1,
-          data: { googleId: info.sub } as never,
-        })) as unknown as AuthUser
+          where: { email: { equals: email } },
+        })
+        const emailUser = byEmail.docs[0] as unknown as AuthUser | undefined
+
+        if (emailUser?.googleId && emailUser.googleId !== info.sub) {
+          return Response.json(
+            { message: 'This email is already linked to another sign-in method.' },
+            { status: 409 },
+          )
+        }
+
+        if (emailUser) {
+          // Google proved ownership of the email. Rotate the password and drop
+          // old sessions so a squatted password account cannot stay signed in.
+          user = (await payload.update({
+            collection: 'users',
+            id: emailUser.id,
+            overrideAccess: true,
+            depth: 1,
+            data: {
+              googleId: info.sub,
+              password: randomBytes(32).toString('hex'),
+              sessions: [],
+            } as never,
+          })) as unknown as AuthUser
+        } else {
+          user = (await payload.create({
+            collection: 'users',
+            overrideAccess: true,
+            depth: 1,
+            data: {
+              email,
+              name: displayName,
+              googleId: info.sub,
+              password: randomBytes(32).toString('hex'),
+              roles: ['user'],
+            } as never,
+          })) as unknown as AuthUser
+          created = true
+        }
+      }
+
+      if (!user) {
+        return Response.json({ message: 'Google sign-in failed' }, { status: 401 })
       }
 
       const collectionConfig = payload.collections.users.config
@@ -137,25 +164,19 @@ const postGoogleAuth: Endpoint = {
       const sid = crypto.randomUUID()
       const now = new Date()
       const expiresAt = new Date(now.getTime() + tokenExpiration * 1000)
-      const currentSessions = Array.isArray(user.sessions) ? user.sessions : []
-      const sessions = [
-        ...currentSessions.filter((session: { expiresAt?: string | Date }) => {
-          if (!session?.expiresAt) return false
-          return new Date(session.expiresAt) > now
-        }),
-        { id: sid, createdAt: now.toISOString(), expiresAt: expiresAt.toISOString() },
-      ]
 
       await payload.update({
         collection: 'users',
         id: user.id,
         overrideAccess: true,
-        data: { sessions } as never,
+        data: {
+          sessions: [{ id: sid, createdAt: now.toISOString(), expiresAt: expiresAt.toISOString() }],
+        } as never,
       })
 
       const fieldsToSign = getFieldsToSign({
         collectionConfig,
-        email,
+        email: user.email || email,
         sid,
         user: user as unknown as PayloadRequest['user'],
       })
@@ -169,8 +190,8 @@ const postGoogleAuth: Endpoint = {
       return Response.json({
         token,
         exp,
-        user: publicUser({ ...user, email }),
-        created: existing.docs.length === 0,
+        user: publicUser({ ...user, email: user.email || email }),
+        created,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Google sign-in failed'

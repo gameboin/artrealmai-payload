@@ -1,4 +1,5 @@
 import { CollectionConfig } from 'payload'
+import { adminOnly } from '../lib/access'
 
 export const Tags: CollectionConfig = {
   slug: 'tags',
@@ -8,10 +9,9 @@ export const Tags: CollectionConfig = {
   },
   access: {
     read: () => true,
-    // FIX: Check if the 'roles' array includes 'admin'
-    create: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
-    update: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
-    delete: ({ req: { user } }) => Boolean((user as any)?.roles?.includes('admin')),
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     {

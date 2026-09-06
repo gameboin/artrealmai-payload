@@ -1,4 +1,5 @@
 import { CollectionConfig } from 'payload'
+import { adminOnly } from '../lib/access'
 import { marked } from 'marked'
 import { CodeBlock } from '../blocks/CodeBlock'
 import { DownloadBlock } from '../blocks/DownloadBlock'
@@ -16,9 +17,9 @@ export const Articles: CollectionConfig = {
   },
   access: {
     read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    create: adminOnly,
+    update: adminOnly,
+    delete: adminOnly,
   },
   fields: [
     { name: 'title', type: 'text', required: true },

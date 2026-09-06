@@ -1,13 +1,16 @@
-import type { CollectionConfig } from 'payload'
-
-function isAdmin(user: unknown) {
-  return Boolean((user as { roles?: string[] } | null)?.roles?.includes('admin'))
-}
+import { APIError, type CollectionConfig } from 'payload'
+import { isAdmin, systemWrite } from '../lib/access'
 
 export const Users: CollectionConfig = {
   slug: 'users',
   auth: {
     useAPIKey: true,
+    maxLoginAttempts: 5,
+    lockTime: 10 * 60 * 1000,
+    cookies: {
+      secure: true,
+      sameSite: 'Lax',
+    },
   },
   access: {
     read: ({ req: { user } }) => {
@@ -23,14 +26,70 @@ export const Users: CollectionConfig = {
     },
     delete: ({ req: { user } }) => isAdmin(user),
   },
+  hooks: {
+    beforeValidate: [
+      ({ data }) => {
+        const password = data && typeof data.password === 'string' ? data.password : ''
+        if (password && password.length < 8) {
+          throw new APIError('Password must be at least 8 characters.', 400)
+        }
+        return data
+      },
+    ],
+    beforeChange: [
+      ({ req, data, operation }) => {
+        if (!data || isAdmin(req.user)) return data
+        if (req.payloadAPI !== 'REST') return data
+        const next = { ...data }
+        delete next.roles
+        delete next.googleId
+        delete next.genFailStreak
+        delete next.genPenaltySlots
+        delete next.genPenaltyDay
+        delete next.genBlockCount
+        delete next.genRejectCount
+        delete next.genBalanceCents
+        delete next.enableAPIKey
+        delete next.apiKey
+        delete next.apiKeyIndex
+        if (operation === 'update') delete next.email
+        return next
+      },
+    ],
+    afterRead: [
+      ({ doc, req }) => {
+        if (!doc) return doc
+        const row = doc as Record<string, unknown>
+        delete row.hash
+        delete row.salt
+        delete row.resetPasswordToken
+        delete row.resetPasswordExpiration
+        delete row.apiKeyIndex
+        if (!isAdmin(req.user)) {
+          delete row.apiKey
+          delete row.enableAPIKey
+          delete row.googleId
+          delete row.genFailStreak
+          delete row.genPenaltySlots
+          delete row.genPenaltyDay
+          delete row.genBlockCount
+          delete row.genRejectCount
+        }
+        return row
+      },
+    ],
+  },
   fields: [
-    { name: 'name', type: 'text', required: true },
+    { name: 'name', type: 'text', required: true, maxLength: 80 },
     { name: 'avatar', type: 'upload', relationTo: 'media' },
     {
       name: 'googleId',
       type: 'text',
       index: true,
-      access: { update: () => false },
+      access: {
+        ...systemWrite,
+        read: ({ req: { user } }) => isAdmin(user),
+      },
       admin: {
         position: 'sidebar',
         readOnly: true,
@@ -52,41 +111,44 @@ export const Users: CollectionConfig = {
       name: 'genFailStreak',
       type: 'number',
       defaultValue: 0,
-      access: { update: () => false },
+      access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
       admin: { hidden: true },
     },
     {
       name: 'genPenaltySlots',
       type: 'number',
       defaultValue: 0,
-      access: { update: () => false },
+      access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
       admin: { hidden: true },
     },
     {
       name: 'genPenaltyDay',
       type: 'text',
-      access: { update: () => false },
+      access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
       admin: { hidden: true },
     },
     {
       name: 'genBlockCount',
       type: 'number',
       defaultValue: 0,
-      access: { update: () => false },
+      access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
       admin: { hidden: true },
     },
     {
       name: 'genRejectCount',
       type: 'number',
       defaultValue: 0,
-      access: { update: () => false },
+      access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
       admin: { hidden: true },
     },
     {
       name: 'genBalanceCents',
       type: 'number',
       defaultValue: 0,
-      access: { update: () => false },
+      access: {
+        ...systemWrite,
+        read: ({ req: { user } }) => Boolean(user),
+      },
       admin: {
         description: 'USD wallet in cents. Changed only by Stripe webhooks and paid gens.',
         readOnly: true,

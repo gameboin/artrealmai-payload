@@ -1,4 +1,7 @@
-import { CollectionConfig } from 'payload'
+import { APIError, type CollectionConfig } from 'payload'
+import { adminOnly } from '../lib/access'
+
+const TOPICS = ['Advertising', 'Collaboration', 'Bug Report', 'General'] as const
 
 export const ContactSubmissions: CollectionConfig = {
   slug: 'contact-submissions',
@@ -7,10 +10,25 @@ export const ContactSubmissions: CollectionConfig = {
     defaultColumns: ['topic', 'name', 'email', 'createdAt'],
   },
   access: {
-    read: ({ req: { user } }) => Boolean((user as { roles?: string[] } | null)?.roles?.includes('admin')),
+    read: adminOnly,
     create: () => true,
-    update: ({ req: { user } }) => Boolean((user as { roles?: string[] } | null)?.roles?.includes('admin')),
-    delete: ({ req: { user } }) => Boolean((user as { roles?: string[] } | null)?.roles?.includes('admin')),
+    update: adminOnly,
+    delete: adminOnly,
+  },
+  hooks: {
+    beforeValidate: [
+      ({ data }) => {
+        if (!data) return data
+        const honey = typeof data.website === 'string' ? data.website.trim() : ''
+        if (honey) {
+          throw new APIError('Invalid submission.', 400)
+        }
+        if (typeof data.topic === 'string' && !TOPICS.includes(data.topic as (typeof TOPICS)[number])) {
+          throw new APIError('Pick a valid topic.', 400)
+        }
+        return data
+      },
+    ],
   },
   fields: [
     {
@@ -28,6 +46,7 @@ export const ContactSubmissions: CollectionConfig = {
       name: 'name',
       type: 'text',
       required: true,
+      maxLength: 80,
     },
     {
       name: 'email',
@@ -38,6 +57,13 @@ export const ContactSubmissions: CollectionConfig = {
       name: 'message',
       type: 'textarea',
       required: true,
+      maxLength: 4000,
+    },
+    {
+      name: 'website',
+      type: 'text',
+      maxLength: 120,
+      admin: { hidden: true },
     },
   ],
 }

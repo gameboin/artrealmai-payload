@@ -66,8 +66,8 @@ export const SavedLogos: CollectionConfig = {
       index: true,
       hooks: {
         beforeChange: [
-          ({ req, operation, value }) => {
-            if (operation === 'create' && req.user) return req.user.id
+          ({ req, value }) => {
+            if (req.user) return req.user.id
             return value
           },
         ],

@@ -129,8 +129,13 @@ export const genStripeWebhookEndpoint: Endpoint = {
       return Response.json({ received: true })
     }
 
-    const userId = session.metadata?.userId || session.client_reference_id || ''
-    const amountCents = Number(session.metadata?.amountCents || session.amount_total || 0)
+    const referenceId = typeof session.client_reference_id === 'string' ? session.client_reference_id : ''
+    const metaUserId = typeof session.metadata?.userId === 'string' ? session.metadata.userId : ''
+    if (referenceId && metaUserId && referenceId !== metaUserId) {
+      return Response.json({ received: true, ignored: 'user mismatch' })
+    }
+    const userId = referenceId || metaUserId
+    const amountCents = Number(session.amount_total)
     if (!userId || !Number.isFinite(amountCents) || amountCents < 1) {
       return Response.json({ received: true })
     }
