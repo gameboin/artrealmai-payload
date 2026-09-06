@@ -646,16 +646,36 @@ export const genListEndpoint: Endpoint = {
     if (!req.user) {
       return Response.json({ message: 'Sign in to view your gallery.' }, { status: 401 })
     }
+    const query = (req.query || {}) as { limit?: unknown; page?: unknown }
+    let limit = Number(query.limit)
+    let page = Number(query.page)
+    if (!Number.isFinite(limit) || limit <= 0 || !Number.isFinite(page) || page <= 0) {
+      try {
+        const url = new URL(typeof req.url === 'string' ? req.url : '', 'http://local')
+        if (!Number.isFinite(limit) || limit <= 0) limit = Number(url.searchParams.get('limit'))
+        if (!Number.isFinite(page) || page <= 0) page = Number(url.searchParams.get('page'))
+      } catch {
+        /* keep defaults */
+      }
+    }
+    limit = Math.min(100, Math.max(1, Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 100))
+    page = Math.max(1, Number.isFinite(page) && page > 0 ? Math.floor(page) : 1)
     const result = await req.payload.find({
       collection: 'generations' as never,
       overrideAccess: true,
+      depth: 0,
       where: {
         and: [{ user: { equals: String(req.user.id) } }, { format: { not_equals: 'BLOCKED' } }],
       },
       sort: '-createdAt',
-      limit: 24,
+      limit,
+      page,
     })
     return Response.json({
+      page,
+      limit,
+      totalDocs: result.totalDocs,
+      hasNextPage: Boolean(result.hasNextPage) || page * limit < Number(result.totalDocs || 0),
       docs: result.docs.map((doc) => {
         const row = doc as {
           id: string
