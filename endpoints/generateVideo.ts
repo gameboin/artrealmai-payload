@@ -409,12 +409,20 @@ export const genVideoStartEndpoint: Endpoint = {
 
     const model = resolveVideoModel(body.model)
     const mode: VideoMode = body.mode === 'i2v' ? 'i2v' : 't2v'
-    const requestedAspect = typeof body.aspect === 'string' && ASPECTS.has(body.aspect) ? body.aspect : '16:9'
-    const aspect = model.aspects.includes(requestedAspect)
-      ? requestedAspect
-      : model.aspects.includes('16:9')
-        ? '16:9'
-        : model.aspects[0]
+    const requestedAspect =
+      mode === 'i2v'
+        ? 'auto'
+        : typeof body.aspect === 'string' && ASPECTS.has(body.aspect)
+          ? body.aspect
+          : '16:9'
+    const aspect =
+      requestedAspect === 'auto'
+        ? 'auto'
+        : model.aspects.includes(requestedAspect)
+          ? requestedAspect
+          : model.aspects.includes('16:9')
+            ? '16:9'
+            : model.aspects[0]
     const duration = Math.round(Number(body.duration))
     const resolution = typeof body.resolution === 'string' ? body.resolution : model.defaultResolution
     if (!model.durations.includes(duration)) {
