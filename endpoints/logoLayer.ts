@@ -23,6 +23,8 @@ async function loadUser(req: PayloadRequest, userId: string) {
     id: userId,
     depth: 0,
     overrideAccess: true,
+    showHiddenFields: true,
+    context: { systemQuota: true },
   })) as LayerUser
 }
 
@@ -104,6 +106,7 @@ export const logoLayerChargeEndpoint: Endpoint = {
         collection: 'users',
         id: userId,
         overrideAccess: true,
+        context: { systemQuota: true },
         data: {
           logoLayerDay: day,
           logoLayerBatches: used + 1,
@@ -141,6 +144,7 @@ export const logoLayerChargeEndpoint: Endpoint = {
       collection: 'users',
       id: userId,
       overrideAccess: true,
+      context: { systemQuota: true },
       data: {
         genBalanceCents: nextBalance,
         logoLayerDay: day,

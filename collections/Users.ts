@@ -37,8 +37,9 @@ export const Users: CollectionConfig = {
       },
     ],
     beforeChange: [
-      ({ req, data, operation }) => {
+      ({ req, data, operation, context }) => {
         if (!data || isAdmin(req.user)) return data
+        if ((context as { systemQuota?: boolean } | undefined)?.systemQuota) return data
         if (req.payloadAPI !== 'REST') return data
         const next = { ...data }
         delete next.roles
@@ -59,7 +60,7 @@ export const Users: CollectionConfig = {
       },
     ],
     afterRead: [
-      ({ doc, req }) => {
+      ({ doc, req, context }) => {
         if (!doc) return doc
         const row = doc as Record<string, unknown>
         delete row.hash
@@ -67,7 +68,10 @@ export const Users: CollectionConfig = {
         delete row.resetPasswordToken
         delete row.resetPasswordExpiration
         delete row.apiKeyIndex
-        if (!isAdmin(req.user)) {
+        // Local API reads from charge/status endpoints must keep quota fields.
+        // REST clients still should not see them.
+        const systemRead = Boolean((context as { systemQuota?: boolean } | undefined)?.systemQuota)
+        if (!isAdmin(req.user) && req.payloadAPI === 'REST' && !systemRead) {
           delete row.apiKey
           delete row.enableAPIKey
           delete row.googleId
