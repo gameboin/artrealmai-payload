@@ -5,7 +5,7 @@ import { stripeCheckoutEnabled } from './stripeWallet'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { randomFileName } from '../lib/randomFile'
 
-type VideoKey = 'grokvid' | 'h3turbo'
+type VideoKey = 'grokvid' | 'grokvid15' | 'h3turbo' | 'h3max'
 type VideoMode = 't2v' | 'i2v'
 
 type VideoModel = {
@@ -41,6 +41,24 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
     defaultDuration: 5,
     defaultResolution: '480p',
   },
+  grokvid15: {
+    key: 'grokvid15',
+    label: 'Grok Imagine Video 1.5',
+    blurb: 'Up to 1080p, with audio',
+    falT2v: 'xai/grok-imagine-video/v1.5/text-to-video',
+    falI2v: 'xai/grok-imagine-video/v1.5/image-to-video',
+    modes: ['t2v', 'i2v'],
+    durations: [5, 6, 8, 10, 15],
+    resolutions: [
+      { id: '480p', label: '480p' },
+      { id: '720p', label: '720p' },
+      { id: '1080p', label: '1080p' },
+    ],
+    aspects: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
+    pricePerSec: { '480p': 13, '720p': 22, '1080p': 40 },
+    defaultDuration: 5,
+    defaultResolution: '480p',
+  },
   h3turbo: {
     key: 'h3turbo',
     label: 'MiniMax H3 Turbo',
@@ -58,10 +76,27 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
     defaultDuration: 5,
     defaultResolution: '480P',
   },
+  h3max: {
+    key: 'h3max',
+    label: 'MiniMax H3 Max',
+    blurb: 'Stronger prompt follow, 5–15s',
+    falT2v: 'minimax/h3-max/text-to-video',
+    falI2v: 'minimax/h3-max/image-to-video',
+    modes: ['t2v', 'i2v'],
+    durations: [5, 6, 8, 10, 15],
+    resolutions: [
+      { id: '480P', label: '480p' },
+      { id: '768P', label: '768p' },
+    ],
+    aspects: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
+    pricePerSec: { '480P': 8, '768P': 13 },
+    defaultDuration: 5,
+    defaultResolution: '480P',
+  },
 }
 
 const MAX_SOURCE_BYTES = 4 * 1024 * 1024
-const ASPECTS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'])
+const ASPECTS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'])
 
 type JobPayload = {
   requestId: string
@@ -206,11 +241,15 @@ function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect
     body.resolution = resolution
     body.aspect_ratio = mode === 'i2v' ? 'auto' : aspect
     if (imageUrl) body.image_url = imageUrl
+  } else if (model.key === 'grokvid15') {
+    body.resolution = resolution
+    if (mode === 't2v' && aspect !== 'auto') body.aspect_ratio = aspect
+    if (imageUrl) body.image_url = imageUrl
   } else {
     body.resolution = resolution
     body.enable_safety_checker = false
     body.prompt_expansion_mode = 'balanced'
-    if (mode === 't2v') body.aspect_ratio = aspect
+    if (mode === 't2v' && aspect !== 'auto') body.aspect_ratio = aspect
     if (imageUrl) body.image_url = imageUrl
   }
   return body
