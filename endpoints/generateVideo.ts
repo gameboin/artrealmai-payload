@@ -424,7 +424,10 @@ export const genVideoStartEndpoint: Endpoint = {
             ? '16:9'
             : model.aspects[0]
     const duration = Math.round(Number(body.duration))
-    const resolution = typeof body.resolution === 'string' ? body.resolution : model.defaultResolution
+    const resolution =
+      typeof body.resolution === 'string' && model.resolutions.some((r) => r.id === body.resolution)
+        ? body.resolution
+        : model.defaultResolution
     if (!model.durations.includes(duration)) {
       return Response.json({ message: 'Pick a duration of 5, 6, 8, 10, or 15 seconds.' }, { status: 400 })
     }

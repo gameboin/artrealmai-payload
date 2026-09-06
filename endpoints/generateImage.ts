@@ -18,6 +18,8 @@ type ModelKey =
   | 'krea2'
 type GenMode = 't2i' | 'i2i'
 
+type ImageRes = { id: string; label: string; priceCents: number }
+
 type GenModel = {
   key: ModelKey
   falId: string
@@ -27,7 +29,13 @@ type GenModel = {
   priceCents: number
   free: boolean
   modes: GenMode[]
+  aspects: string[]
+  resolutions: ImageRes[]
+  defaultResolution: string
 }
+
+const COMMON_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']
+const KREA_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '4:5', '3:2', '2:3']
 
 const MODELS: Record<ModelKey, GenModel> = {
   schnell: {
@@ -38,6 +46,9 @@ const MODELS: Record<ModelKey, GenModel> = {
     priceCents: 5,
     free: true,
     modes: ['t2i'],
+    aspects: [...COMMON_ASPECTS],
+    resolutions: [],
+    defaultResolution: '',
   },
   flux2pro: {
     key: 'flux2pro',
@@ -48,6 +59,12 @@ const MODELS: Record<ModelKey, GenModel> = {
     priceCents: 8,
     free: false,
     modes: ['t2i', 'i2i'],
+    aspects: [...COMMON_ASPECTS],
+    resolutions: [
+      { id: '1K', label: '1K', priceCents: 8 },
+      { id: '2K', label: '2K', priceCents: 15 },
+    ],
+    defaultResolution: '1K',
   },
   banana2: {
     key: 'banana2',
@@ -58,6 +75,14 @@ const MODELS: Record<ModelKey, GenModel> = {
     priceCents: 15,
     free: false,
     modes: ['t2i', 'i2i'],
+    aspects: [...COMMON_ASPECTS],
+    resolutions: [
+      { id: '0.5K', label: '0.5K', priceCents: 11 },
+      { id: '1K', label: '1K', priceCents: 15 },
+      { id: '2K', label: '2K', priceCents: 23 },
+      { id: '4K', label: '4K', priceCents: 30 },
+    ],
+    defaultResolution: '1K',
   },
   bananapro: {
     key: 'bananapro',
@@ -68,6 +93,13 @@ const MODELS: Record<ModelKey, GenModel> = {
     priceCents: 25,
     free: false,
     modes: ['t2i', 'i2i'],
+    aspects: [...COMMON_ASPECTS],
+    resolutions: [
+      { id: '1K', label: '1K', priceCents: 25 },
+      { id: '2K', label: '2K', priceCents: 25 },
+      { id: '4K', label: '4K', priceCents: 50 },
+    ],
+    defaultResolution: '1K',
   },
   seedream45: {
     key: 'seedream45',
@@ -78,6 +110,12 @@ const MODELS: Record<ModelKey, GenModel> = {
     priceCents: 10,
     free: false,
     modes: ['t2i', 'i2i'],
+    aspects: [...COMMON_ASPECTS],
+    resolutions: [
+      { id: '2K', label: '2K', priceCents: 10 },
+      { id: '4K', label: '4K', priceCents: 16 },
+    ],
+    defaultResolution: '2K',
   },
   seedream5lite: {
     key: 'seedream5lite',
@@ -88,6 +126,12 @@ const MODELS: Record<ModelKey, GenModel> = {
     priceCents: 8,
     free: false,
     modes: ['t2i', 'i2i'],
+    aspects: [...COMMON_ASPECTS],
+    resolutions: [
+      { id: '2K', label: '2K', priceCents: 8 },
+      { id: '3K', label: '3K', priceCents: 12 },
+    ],
+    defaultResolution: '2K',
   },
   grok: {
     key: 'grok',
@@ -98,6 +142,12 @@ const MODELS: Record<ModelKey, GenModel> = {
     priceCents: 6,
     free: false,
     modes: ['t2i', 'i2i'],
+    aspects: [...COMMON_ASPECTS],
+    resolutions: [
+      { id: '1k', label: '1K', priceCents: 6 },
+      { id: '2k', label: '2K', priceCents: 8 },
+    ],
+    defaultResolution: '1k',
   },
   krea2: {
     key: 'krea2',
@@ -107,13 +157,14 @@ const MODELS: Record<ModelKey, GenModel> = {
     priceCents: 12,
     free: false,
     modes: ['t2i'],
+    aspects: [...KREA_ASPECTS],
+    resolutions: [],
+    defaultResolution: '',
   },
 }
 
 const MAX_SOURCE_BYTES = 4 * 1024 * 1024
 
-const IMAGE_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'] as const
-const ASPECTS = new Set<string>(IMAGE_ASPECTS)
 const LEGACY_SIZE_TO_ASPECT: Record<string, string> = {
   square_hd: '1:1',
   square: '1:1',
@@ -131,8 +182,23 @@ function publicModels() {
     priceCents: m.priceCents,
     free: m.free,
     modes: m.modes,
-    aspects: [...IMAGE_ASPECTS],
+    aspects: [...m.aspects],
+    resolutions: m.resolutions,
+    defaultResolution: m.defaultResolution,
   }))
+}
+
+function modelPrice(model: GenModel, resolution?: string) {
+  if (!model.resolutions.length) return model.priceCents
+  const id = resolution || model.defaultResolution
+  const hit = model.resolutions.find((row) => row.id === id)
+  return hit ? hit.priceCents : model.priceCents
+}
+
+function resolveResolution(model: GenModel, raw: unknown) {
+  if (!model.resolutions.length) return ''
+  if (typeof raw === 'string' && model.resolutions.some((row) => row.id === raw)) return raw
+  return model.defaultResolution
 }
 
 function resolveModel(raw: unknown): GenModel {
@@ -140,16 +206,32 @@ function resolveModel(raw: unknown): GenModel {
   return MODELS.schnell
 }
 
-function resolveAspect(body: { aspect?: unknown; imageSize?: unknown }) {
-  if (typeof body.aspect === 'string' && ASPECTS.has(body.aspect)) return body.aspect
+function resolveAspect(model: GenModel, body: { aspect?: unknown; imageSize?: unknown }) {
+  const allowed = new Set(model.aspects)
+  if (typeof body.aspect === 'string' && allowed.has(body.aspect)) return body.aspect
   if (typeof body.imageSize === 'string') {
-    if (ASPECTS.has(body.imageSize)) return body.imageSize
-    if (LEGACY_SIZE_TO_ASPECT[body.imageSize]) return LEGACY_SIZE_TO_ASPECT[body.imageSize]
+    if (allowed.has(body.imageSize)) return body.imageSize
+    const mapped = LEGACY_SIZE_TO_ASPECT[body.imageSize]
+    if (mapped && allowed.has(mapped)) return mapped
   }
-  return '1:1'
+  return model.aspects.includes('1:1') ? '1:1' : model.aspects[0]
 }
 
-function fluxImageSize(aspect: string) {
+function fluxPreset(aspect: string): { width: number; height: number } {
+  if (aspect === '16:9') return { width: 1024, height: 576 }
+  if (aspect === '9:16') return { width: 576, height: 1024 }
+  if (aspect === '4:3') return { width: 1024, height: 768 }
+  if (aspect === '3:4') return { width: 768, height: 1024 }
+  if (aspect === '3:2') return { width: 1152, height: 768 }
+  if (aspect === '2:3') return { width: 768, height: 1152 }
+  return { width: 1024, height: 1024 }
+}
+
+function fluxImageSize(aspect: string, resolution?: string) {
+  if (resolution === '2K') {
+    const base = fluxPreset(aspect)
+    return { width: base.width * 2, height: base.height * 2 }
+  }
   if (aspect === '16:9') return 'landscape_16_9'
   if (aspect === '9:16') return 'portrait_16_9'
   if (aspect === '4:3') return 'landscape_4_3'
@@ -159,17 +241,40 @@ function fluxImageSize(aspect: string) {
   return 'square_hd'
 }
 
-function seedreamImageSize(aspect: string) {
-  if (aspect === '16:9') return { width: 2560, height: 1440 }
-  if (aspect === '9:16') return { width: 1440, height: 2560 }
-  if (aspect === '4:3') return { width: 2304, height: 1728 }
-  if (aspect === '3:4') return { width: 1728, height: 2304 }
-  if (aspect === '3:2') return { width: 2304, height: 1536 }
-  if (aspect === '2:3') return { width: 1536, height: 2304 }
-  return { width: 2048, height: 2048 }
+function seedreamImageSize(aspect: string, resolution?: string) {
+  let size =
+    aspect === '16:9'
+      ? { width: 2560, height: 1440 }
+      : aspect === '9:16'
+        ? { width: 1440, height: 2560 }
+        : aspect === '4:3'
+          ? { width: 2304, height: 1728 }
+          : aspect === '3:4'
+            ? { width: 1728, height: 2304 }
+            : aspect === '3:2'
+              ? { width: 2304, height: 1536 }
+              : aspect === '2:3'
+                ? { width: 1536, height: 2304 }
+                : { width: 2048, height: 2048 }
+  const cap = resolution === '4K' ? 4096 : resolution === '3K' ? 3072 : 0
+  if (cap) {
+    const scale = Math.min(cap / size.width, cap / size.height)
+    size = {
+      width: Math.round(size.width * scale),
+      height: Math.round(size.height * scale),
+    }
+  }
+  return size
 }
 
-function falPayload(model: GenModel, prompt: string, aspect: string, seed?: number, imageUrl?: string) {
+function falPayload(
+  model: GenModel,
+  prompt: string,
+  aspect: string,
+  resolution: string,
+  seed?: number,
+  imageUrl?: string,
+) {
   const body: Record<string, unknown> = { prompt }
   if (typeof seed === 'number' && model.key !== 'grok') body.seed = seed
 
@@ -180,21 +285,21 @@ function falPayload(model: GenModel, prompt: string, aspect: string, seed?: numb
     body.enable_safety_checker = true
     body.output_format = 'jpeg'
   } else if (model.key === 'flux2pro') {
-    body.image_size = imageUrl ? 'auto' : fluxImageSize(aspect)
+    body.image_size = imageUrl && resolution !== '2K' ? 'auto' : fluxImageSize(aspect, resolution)
     body.enable_safety_checker = true
     body.safety_tolerance = '2'
     body.output_format = 'jpeg'
     if (imageUrl) body.image_urls = [imageUrl]
   } else if (model.key === 'banana2' || model.key === 'bananapro') {
     body.num_images = 1
-    body.aspect_ratio = aspect
+    body.aspect_ratio = imageUrl ? 'auto' : aspect
     body.output_format = 'jpeg'
     body.safety_tolerance = '4'
-    body.resolution = '1K'
+    body.resolution = resolution || model.defaultResolution || '1K'
     body.limit_generations = true
     if (imageUrl) body.image_urls = [imageUrl]
   } else if (model.key === 'seedream45' || model.key === 'seedream5lite') {
-    body.image_size = seedreamImageSize(aspect)
+    body.image_size = seedreamImageSize(aspect, resolution)
     body.num_images = 1
     body.max_images = 1
     body.enable_safety_checker = true
@@ -202,7 +307,7 @@ function falPayload(model: GenModel, prompt: string, aspect: string, seed?: numb
   } else if (model.key === 'grok') {
     body.num_images = 1
     body.aspect_ratio = imageUrl ? 'auto' : aspect
-    body.resolution = '1k'
+    body.resolution = resolution || model.defaultResolution || '1k'
     body.output_format = 'jpeg'
     if (imageUrl) body.image_urls = [imageUrl]
   } else {
@@ -477,7 +582,11 @@ export const genStatusEndpoint: Endpoint = {
     const genUser = await loadGenUser(req, userId)
     const remaining = Math.max(0, DAILY_LIMIT - used)
     const balanceCents = Number(genUser.genBalanceCents) || 0
-    const cheapestPaid = Math.min(...Object.values(MODELS).map((m) => m.priceCents))
+    const cheapestPaid = Math.min(
+      ...Object.values(MODELS).flatMap((m) =>
+        m.resolutions.length ? m.resolutions.map((row) => row.priceCents) : [m.priceCents],
+      ),
+    )
     const adminComp = await userIsGenAdmin(req)
     return Response.json({
       enabled: Boolean(process.env.FAL_KEY),
@@ -689,6 +798,7 @@ export const genImageEndpoint: Endpoint = {
       imageSize?: unknown
       seed?: unknown
       image?: unknown
+      resolution?: unknown
     }
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
     if (prompt.length < 3) {
@@ -707,7 +817,9 @@ export const genImageEndpoint: Endpoint = {
       )
     }
 
-    const aspect = resolveAspect(body)
+    const aspect = resolveAspect(model, body)
+    const resolution = resolveResolution(model, body.resolution)
+    const priceCents = modelPrice(model, resolution)
     const seed =
       typeof body.seed === 'number' && Number.isFinite(body.seed)
         ? Math.floor(body.seed)
@@ -739,16 +851,16 @@ export const genImageEndpoint: Endpoint = {
     const balanceCents = Number(genUser.genBalanceCents) || 0
     const adminComp = await userIsGenAdmin(req)
     const useFree = !adminComp && model.free && mode === 't2i' && remainingFree > 0
-    if (!adminComp && !useFree && balanceCents < model.priceCents) {
+    if (!adminComp && !useFree && balanceCents < priceCents) {
       const hint = model.free
-        ? `Daily free gens are used. Add funds to keep generating ($${(model.priceCents / 100).toFixed(2)} each).`
-        : `${model.label} is $${(model.priceCents / 100).toFixed(2)} each. Add funds to generate.`
+        ? `Daily free gens are used. Add funds to keep generating ($${(priceCents / 100).toFixed(2)} each).`
+        : `${model.label} is $${(priceCents / 100).toFixed(2)} each. Add funds to generate.`
       return Response.json(
         {
           message: hint,
           remaining: remainingFree,
           balanceCents,
-          priceCents: model.priceCents,
+          priceCents,
           model: model.label,
           modelId: model.key,
           needsFunds: true,
@@ -765,7 +877,7 @@ export const genImageEndpoint: Endpoint = {
         Authorization: `Key ${falKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(falPayload(model, prompt, aspect, seed, sourceUrl || undefined)),
+      body: JSON.stringify(falPayload(model, prompt, aspect, resolution, seed, sourceUrl || undefined)),
     })
 
     const falJson = normalizeFalJson(await falRes.json().catch(() => null))
@@ -785,8 +897,8 @@ export const genImageEndpoint: Endpoint = {
       let chargedCents = 0
       let nextBalance = balanceCents
       if (outcome === 'filtered' && !useFree && !adminComp) {
-        chargedCents = model.priceCents
-        nextBalance = Math.max(0, balanceCents - model.priceCents)
+        chargedCents = priceCents
+        nextBalance = Math.max(0, balanceCents - priceCents)
         await req.payload.update({
           collection: 'users',
           id: userId,
@@ -804,7 +916,7 @@ export const genImageEndpoint: Endpoint = {
         } else if (useFree) {
           message = `${FILTERED_LEAD} Used 1 free gen. ${remaining} left today.`
         } else {
-          message = `${FILTERED_LEAD} Used 1 ${model.label} gen (${money(model.priceCents)}). Balance ${money(nextBalance)}.`
+          message = `${FILTERED_LEAD} Used 1 ${model.label} gen (${money(priceCents)}). Balance ${money(nextBalance)}.`
         }
       }
 
@@ -817,7 +929,7 @@ export const genImageEndpoint: Endpoint = {
           slotConsumed: outcome === 'filtered',
           chargedCents,
           balanceCents: nextBalance,
-          priceCents: model.priceCents,
+          priceCents,
           model: model.label,
           modelId: model.key,
           blockKind: outcome,
@@ -832,7 +944,7 @@ export const genImageEndpoint: Endpoint = {
           message: serviceFailMessage(falRes.status, falJson),
           remaining: remainingFree,
           balanceCents,
-          priceCents: model.priceCents,
+          priceCents,
           blockKind: 'service',
         },
         { status: 502 },
@@ -871,8 +983,8 @@ export const genImageEndpoint: Endpoint = {
     } else if (useFree) {
       remaining = Math.max(0, remainingFree - 1)
     } else {
-      chargedCents = model.priceCents
-      nextBalance = balanceCents - model.priceCents
+      chargedCents = priceCents
+      nextBalance = balanceCents - priceCents
       await req.payload.update({
         collection: 'users',
         id: userId,
@@ -891,7 +1003,7 @@ export const genImageEndpoint: Endpoint = {
         model: model.label,
         modelId: model.key,
         mode,
-        imageSize: aspect,
+        imageSize: resolution ? aspect + ' · ' + resolution : aspect,
         seed: usedSeed,
         url: storedUrl,
         width: image.width,
@@ -911,7 +1023,7 @@ export const genImageEndpoint: Endpoint = {
       model: model.label,
       modelId: model.key,
       mode,
-      imageSize: aspect,
+      imageSize: resolution ? aspect + ' · ' + resolution : aspect,
       width: image.width,
       height: image.height,
       format: fileFormat,
@@ -921,7 +1033,8 @@ export const genImageEndpoint: Endpoint = {
       remaining,
       balanceCents: nextBalance,
       chargedCents,
-      priceCents: model.priceCents,
+      priceCents,
+      resolution,
       adminComp,
     })
   },
