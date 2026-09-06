@@ -49,6 +49,8 @@ export const Users: CollectionConfig = {
         delete next.genBlockCount
         delete next.genRejectCount
         delete next.genBalanceCents
+        delete next.logoLayerDay
+        delete next.logoLayerBatches
         delete next.enableAPIKey
         delete next.apiKey
         delete next.apiKeyIndex
@@ -74,6 +76,8 @@ export const Users: CollectionConfig = {
           delete row.genPenaltyDay
           delete row.genBlockCount
           delete row.genRejectCount
+          delete row.logoLayerDay
+          delete row.logoLayerBatches
         }
         return row
       },
@@ -153,6 +157,19 @@ export const Users: CollectionConfig = {
         description: 'USD wallet in cents. Changed only by Stripe webhooks and paid gens.',
         readOnly: true,
       },
+    },
+    {
+      name: 'logoLayerDay',
+      type: 'text',
+      access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
+      admin: { hidden: true },
+    },
+    {
+      name: 'logoLayerBatches',
+      type: 'number',
+      defaultValue: 0,
+      access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
+      admin: { hidden: true },
     },
   ],
 }
