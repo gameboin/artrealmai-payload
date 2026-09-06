@@ -40,5 +40,6 @@ export const Generations: CollectionConfig = {
     { name: 'durationSec', type: 'number' },
     { name: 'resolution', type: 'text' },
     { name: 'jobId', type: 'text', index: true },
+    { name: 'sourceUrl', type: 'text' },
   ],
 }

@@ -676,6 +676,7 @@ export const genListEndpoint: Endpoint = {
           durationSec?: number | null
           resolution?: string | null
           jobId?: string | null
+          sourceUrl?: string | null
           createdAt?: string
         }
         return {
@@ -697,6 +698,7 @@ export const genListEndpoint: Endpoint = {
           durationSec: row.durationSec,
           resolution: row.resolution,
           jobId: row.jobId,
+          sourceUrl: row.sourceUrl || undefined,
           createdAt: row.createdAt,
         }
       }),
@@ -723,22 +725,29 @@ export const genFileEndpoint: Endpoint = {
         id,
         depth: 0,
         overrideAccess: true,
-      })) as { url?: string; user?: string | { id?: string }; kind?: string; format?: string }
+      })) as { url?: string; sourceUrl?: string; user?: string | { id?: string }; kind?: string; format?: string }
 
       const ownerId = typeof doc.user === 'string' ? doc.user : doc.user?.id
       const isAdmin = Array.isArray((req.user as { roles?: string[] }).roles)
         && (req.user as { roles?: string[] }).roles?.includes('admin')
-      if (!doc?.url || (!isAdmin && ownerId !== String(req.user.id))) {
-        return Response.json({ message: 'Image not found' }, { status: 404 })
+      const wantSource =
+        String((req.query as { source?: unknown } | undefined)?.source || '') === '1' ||
+        (typeof req.url === 'string' && /[?&]source=1(?:&|$)/.test(req.url))
+      const fileUrl = wantSource ? doc.sourceUrl : doc.url
+      if (!fileUrl || (!isAdmin && ownerId !== String(req.user.id))) {
+        return Response.json(
+          { message: wantSource ? 'No source image stored for this generation.' : 'Image not found' },
+          { status: 404 },
+        )
       }
 
-      const upstream = await fetch(doc.url)
+      const upstream = await fetch(fileUrl)
       if (!upstream.ok || !upstream.body) {
-        return Response.redirect(doc.url, 302)
+        return Response.redirect(fileUrl, 302)
       }
 
-      const isVideo = doc.kind === 'video' || (doc.format || '').toUpperCase() === 'MP4'
-      const filename = isVideo ? 'artrealmai-gen.mp4' : 'artrealmai-gen.jpg'
+      const isVideo = !wantSource && (doc.kind === 'video' || (doc.format || '').toUpperCase() === 'MP4')
+      const filename = wantSource ? 'artrealmai-source.jpg' : isVideo ? 'artrealmai-gen.mp4' : 'artrealmai-gen.jpg'
       return new Response(upstream.body, {
         headers: {
           'Content-Type':
@@ -1036,6 +1045,7 @@ export const genImageEndpoint: Endpoint = {
         bytes: fileBytes || undefined,
         chargedCents,
         durationMs,
+        sourceUrl: sourceUrl || undefined,
       } as never,
     })) as { id: string; createdAt?: string }
 
@@ -1059,6 +1069,7 @@ export const genImageEndpoint: Endpoint = {
       chargedCents,
       priceCents,
       resolution,
+      sourceUrl: sourceUrl || undefined,
       adminComp,
     })
   },

@@ -112,6 +112,7 @@ type JobPayload = {
   resolution: string
   started: number
   priceCents: number
+  sourceUrl?: string
   h?: string
 }
 
@@ -565,6 +566,7 @@ export const genVideoStartEndpoint: Endpoint = {
       resolution,
       started,
       priceCents,
+      sourceUrl: sourceUrl || undefined,
     })
     return Response.json({
       pending: true,
@@ -807,6 +809,7 @@ export const genVideoPollEndpoint: Endpoint = {
         durationSec: job.duration,
         resolution: job.resolution,
         jobId: job.requestId,
+        sourceUrl: job.sourceUrl || undefined,
       } as never,
     })) as { id: string; createdAt?: string }
 
@@ -827,6 +830,7 @@ export const genVideoPollEndpoint: Endpoint = {
       durationSec: job.duration,
       resolution: job.resolution,
       createdAt: doc.createdAt || new Date().toISOString(),
+      sourceUrl: job.sourceUrl || undefined,
       chargedCents,
       priceCents: job.priceCents,
       balanceCents: nextBalance,
