@@ -222,6 +222,129 @@ function isPolicyFail(status: number, json: { error?: unknown; detail?: unknown;
   return /content_policy|nsfw|safety|blocked|prohibited|moderation/.test(text)
 }
 
+const VIDEO_FILTERED_BILLED =
+  "That prompt was blocked by the model's safety checker after the run. This uses 1 gen because Fal billed that completed run even though you did not get the video."
+const VIDEO_FILTERED_FREE =
+  "That prompt was blocked by the model's safety checker. Fal did not charge for this run, so this one is free."
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+type FalChargeCheck = { billed: boolean; costUsd: number; confirmed: boolean }
+
+async function falRequestCharged(falKey: string, requestId: string, started: number): Promise<FalChargeCheck> {
+  if (!requestId) return { billed: false, costUsd: 0, confirmed: false }
+  const start = new Date(Math.max(0, started - 6 * 60 * 60 * 1000)).toISOString()
+  const url =
+    'https://api.fal.ai/v1/models/billing-events?request_id=' +
+    encodeURIComponent(requestId) +
+    '&start=' +
+    encodeURIComponent(start) +
+    '&limit=20'
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (attempt) await sleep(700 * attempt)
+    try {
+      const res = await fetch(url, { headers: falAuth(falKey) })
+      if (res.status === 401 || res.status === 403) {
+        return { billed: false, costUsd: 0, confirmed: false }
+      }
+      if (!res.ok) continue
+      const json = (await res.json()) as {
+        billing_events?: { request_id?: string; cost_total?: number | null }[]
+      }
+      const events = (json.billing_events || []).filter((row) => row.request_id === requestId)
+      if (!events.length) continue
+      const costUsd = events.reduce((sum, row) => sum + (Number(row.cost_total) || 0), 0)
+      if (costUsd > 0.0000001) return { billed: true, costUsd, confirmed: true }
+      return { billed: false, costUsd: 0, confirmed: true }
+    } catch {
+      continue
+    }
+  }
+  return { billed: false, costUsd: 0, confirmed: false }
+}
+
+async function settleBlockedVideo(
+  req: PayloadRequest,
+  job: JobPayload,
+  currentBalance: number,
+  falBill: FalChargeCheck,
+) {
+  const existing = await req.payload.find({
+    collection: 'generations' as never,
+    overrideAccess: true,
+    limit: 1,
+    where: {
+      and: [{ user: { equals: job.userId } }, { jobId: { equals: job.requestId } }],
+    },
+  })
+  const already = existing.docs[0] as { format?: string; chargedCents?: number } | undefined
+  if (already?.format === 'BLOCKED') {
+    return Response.json(
+      {
+        message: already.chargedCents ? VIDEO_FILTERED_BILLED : VIDEO_FILTERED_FREE,
+        blockKind: already.chargedCents ? 'filtered' : 'rejected',
+        chargedCents: already.chargedCents || 0,
+        priceCents: job.priceCents,
+        balanceCents: currentBalance,
+      },
+      { status: 422 },
+    )
+  }
+  const takeCredit = falBill.confirmed && falBill.billed
+  const adminComp = await userIsGenAdmin(req)
+  let chargedCents = 0
+  let nextBalance = currentBalance
+  if (takeCredit && !adminComp) {
+    chargedCents = job.priceCents
+    nextBalance = Math.max(0, currentBalance - job.priceCents)
+    await req.payload.update({
+      collection: 'users',
+      id: job.userId,
+      overrideAccess: true,
+      context: { systemQuota: true },
+      data: { genBalanceCents: nextBalance } as never,
+    })
+  }
+  const model = VIDEO_MODELS[job.model]
+  await req.payload.create({
+    collection: 'generations' as never,
+    overrideAccess: true,
+    data: {
+      user: job.userId,
+      prompt: job.prompt,
+      model: model.label,
+      modelId: model.key,
+      mode: job.mode,
+      imageSize: job.aspect,
+      url: 'blocked://safety',
+      format: 'BLOCKED',
+      chargedCents,
+      durationMs: Date.now() - job.started,
+      kind: 'video',
+      durationSec: job.duration,
+      resolution: job.resolution,
+      jobId: job.requestId,
+    } as never,
+  })
+  return Response.json(
+    {
+      message:
+        takeCredit && adminComp
+          ? VIDEO_FILTERED_BILLED + ' Admin account · not charged.'
+          : takeCredit
+            ? VIDEO_FILTERED_BILLED
+            : VIDEO_FILTERED_FREE,
+      blockKind: takeCredit ? 'filtered' : 'rejected',
+      chargedCents,
+      priceCents: job.priceCents,
+      balanceCents: nextBalance,
+    },
+    { status: 422 },
+  )
+}
+
 export const genVideoStatusEndpoint: Endpoint = {
   path: '/gen/video-status',
   method: 'get',
@@ -448,13 +571,14 @@ export const genVideoPollEndpoint: Endpoint = {
         }
       }
       if (isPolicyFail(statusRes.status, statusJson)) {
-        return Response.json(
-          {
-            message: 'That prompt was rejected before a billed run started, so this one is free.',
-            blockKind: 'rejected',
-          },
-          { status: 422 },
-        )
+        const falBill = await falRequestCharged(falKey, job.requestId, job.started)
+        const user = (await req.payload.findByID({
+          collection: 'users',
+          id: job.userId,
+          depth: 0,
+          overrideAccess: true,
+        })) as { genBalanceCents?: number | null }
+        return settleBlockedVideo(req, job, Number(user.genBalanceCents) || 0, falBill)
       }
       return Response.json(
         { message: 'The video service failed. No gen was used. Try again.', blockKind: 'service' },
@@ -501,13 +625,29 @@ export const genVideoPollEndpoint: Endpoint = {
           createdAt?: string
         }
       | undefined
+    const userId = job.userId
+    const balanceUser = (await req.payload.findByID({
+      collection: 'users',
+      id: userId,
+      depth: 0,
+      overrideAccess: true,
+    })) as { genBalanceCents?: number | null }
+    const currentBalance = Number(balanceUser.genBalanceCents) || 0
+    if (already?.format === 'BLOCKED') {
+      return Response.json(
+        {
+          message: already.chargedCents
+            ? VIDEO_FILTERED_BILLED
+            : VIDEO_FILTERED_FREE,
+          blockKind: already.chargedCents ? 'filtered' : 'rejected',
+          chargedCents: already.chargedCents || 0,
+          priceCents: job.priceCents,
+          balanceCents: currentBalance,
+        },
+        { status: 422 },
+      )
+    }
     if (already?.url) {
-      const user = (await req.payload.findByID({
-        collection: 'users',
-        id: String(req.user.id),
-        depth: 0,
-        overrideAccess: true,
-      })) as { genBalanceCents?: number | null }
       return Response.json({
         id: already.id,
         url: already.url,
@@ -527,19 +667,14 @@ export const genVideoPollEndpoint: Endpoint = {
         createdAt: already.createdAt,
         chargedCents: already.chargedCents || 0,
         priceCents: job.priceCents,
-        balanceCents: Number(user.genBalanceCents) || 0,
+        balanceCents: currentBalance,
       })
     }
     if (!resultRes.ok || !video?.url) {
-      if (isPolicyFail(resultRes.status, resultJson)) {
-        return Response.json(
-          {
-            message:
-              "That prompt was blocked by the model's safety checker after the run. This uses 1 gen because a completed run still costs us even when you do not get the video.",
-            blockKind: 'filtered',
-          },
-          { status: 422 },
-        )
+      const policy = isPolicyFail(resultRes.status, resultJson)
+      const falBill = await falRequestCharged(falKey, job.requestId, job.started)
+      if (policy || falBill.billed) {
+        return settleBlockedVideo(req, job, currentBalance, falBill)
       }
       return Response.json(
         { message: 'No video came back. Try again.', blockKind: 'service' },
@@ -548,7 +683,6 @@ export const genVideoPollEndpoint: Endpoint = {
     }
 
     const model = VIDEO_MODELS[job.model]
-    const userId = job.userId
     const adminComp = await userIsGenAdmin(req)
     const user = (await req.payload.findByID({
       collection: 'users',

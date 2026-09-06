@@ -402,7 +402,11 @@ async function gensToday(req: PayloadRequest, userId: string) {
     overrideAccess: true,
     limit: 1,
     where: {
-      and: [{ user: { equals: userId } }, { createdAt: { greater_than_equal: startOfUtcDay().toISOString() } }],
+      and: [
+        { user: { equals: userId } },
+        { createdAt: { greater_than_equal: startOfUtcDay().toISOString() } },
+        { format: { not_equals: 'BLOCKED' } },
+      ],
     },
   })
   return result.totalDocs
@@ -512,7 +516,9 @@ export const genListEndpoint: Endpoint = {
     const result = await req.payload.find({
       collection: 'generations' as never,
       overrideAccess: true,
-      where: { user: { equals: String(req.user.id) } },
+      where: {
+        and: [{ user: { equals: String(req.user.id) } }, { format: { not_equals: 'BLOCKED' } }],
+      },
       sort: '-createdAt',
       limit: 24,
     })
