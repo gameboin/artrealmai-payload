@@ -8,7 +8,6 @@ import { randomFileName } from '../lib/randomFile'
 const DAILY_LIMIT = 4
 
 type ModelKey =
-  | 'schnell'
   | 'flux2pro'
   | 'flux2klein9b'
   | 'banana2'
@@ -39,18 +38,6 @@ const COMMON_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']
 const KREA_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '4:5', '3:2', '2:3']
 
 const MODELS: Record<ModelKey, GenModel> = {
-  schnell: {
-    key: 'schnell',
-    falId: 'fal-ai/flux/schnell',
-    label: 'Flux Schnell',
-    blurb: 'Fast preview',
-    priceCents: 5,
-    free: true,
-    modes: ['t2i'],
-    aspects: [...COMMON_ASPECTS],
-    resolutions: [],
-    defaultResolution: '',
-  },
   flux2pro: {
     key: 'flux2pro',
     falId: 'fal-ai/flux-2-pro',
@@ -74,7 +61,7 @@ const MODELS: Record<ModelKey, GenModel> = {
     label: 'Flux.2 Klein 9B',
     blurb: 'Fast Flux.2 stills',
     priceCents: 5,
-    free: false,
+    free: true,
     modes: ['t2i', 'i2i'],
     aspects: [...COMMON_ASPECTS],
     resolutions: [
@@ -220,7 +207,16 @@ function resolveResolution(model: GenModel, raw: unknown) {
 
 function resolveModel(raw: unknown): GenModel {
   if (typeof raw === 'string' && raw in MODELS) return MODELS[raw as ModelKey]
-  return MODELS.schnell
+  return MODELS.flux2klein9b
+}
+
+function freeCreditCost(resolution?: string) {
+  return String(resolution || '').toUpperCase() === '2K' ? 2 : 1
+}
+
+function creditsForFreeGen(modelId?: string | null, imageSize?: string | null) {
+  if (modelId === 'flux2klein9b' && /(?:^|[·\s])2K(?:\s|$)/i.test(String(imageSize || ''))) return 2
+  return 1
 }
 
 function resolveAspect(model: GenModel, body: { aspect?: unknown; imageSize?: unknown }) {
@@ -295,13 +291,7 @@ function falPayload(
   const body: Record<string, unknown> = { prompt }
   if (typeof seed === 'number' && model.key !== 'grok') body.seed = seed
 
-  if (model.key === 'schnell') {
-    body.image_size = fluxImageSize(aspect)
-    body.num_images = 1
-    body.num_inference_steps = 4
-    body.enable_safety_checker = true
-    body.output_format = 'jpeg'
-  } else if (model.key === 'flux2pro') {
+  if (model.key === 'flux2pro') {
     body.image_size = imageUrl && resolution !== '2K' ? 'auto' : fluxImageSize(aspect, resolution)
     body.enable_safety_checker = true
     body.safety_tolerance = '2'
@@ -525,20 +515,30 @@ function isAdminUser(user: { roles?: string[] } | null | undefined) {
   return Array.isArray(user?.roles) && user.roles.includes('admin')
 }
 
-async function gensToday(req: PayloadRequest, userId: string) {
+async function freeCreditsFromGens(req: PayloadRequest, userId: string) {
   const result = await req.payload.find({
     collection: 'generations' as never,
     overrideAccess: true,
-    limit: 1,
+    depth: 0,
+    limit: 200,
     where: {
       and: [
         { user: { equals: userId } },
         { createdAt: { greater_than_equal: startOfUtcDay().toISOString() } },
         { format: { not_equals: 'BLOCKED' } },
+        {
+          or: [{ modelId: { equals: 'flux2klein9b' } }, { modelId: { equals: 'schnell' } }],
+        },
       ],
     },
   })
-  return result.totalDocs
+  let credits = 0
+  for (const doc of result.docs) {
+    const row = doc as { chargedCents?: number | null; modelId?: string | null; imageSize?: string | null }
+    if (Number(row.chargedCents) > 0) continue
+    credits += creditsForFreeGen(row.modelId, row.imageSize)
+  }
+  return credits
 }
 
 async function loadGenUser(req: PayloadRequest, userId: string) {
@@ -571,7 +571,7 @@ function rejectsToday(user: GenUser) {
 
 async function usedToday(req: PayloadRequest, userId: string) {
   const user = await loadGenUser(req, userId)
-  const gens = await gensToday(req, userId)
+  const gens = await freeCreditsFromGens(req, userId)
   return gens + penaltySlotsForToday(user)
 }
 
@@ -614,8 +614,8 @@ export const genStatusEndpoint: Endpoint = {
     const adminComp = await userIsGenAdmin(req)
     return Response.json({
       enabled: Boolean(process.env.FAL_KEY),
-      model: MODELS.schnell.label,
-      modelId: MODELS.schnell.key,
+      model: MODELS.flux2klein9b.label,
+      modelId: MODELS.flux2klein9b.key,
       models: publicModels(),
       videoModels: publicVideoModels(),
       modes: [
@@ -630,7 +630,7 @@ export const genStatusEndpoint: Endpoint = {
       failStreak: 0,
       failsPerSlot: 1,
       balanceCents,
-      priceCents: MODELS.schnell.priceCents,
+      priceCents: MODELS.flux2klein9b.priceCents,
       stripeEnabled: stripeCheckoutEnabled(),
       packs: [5, 15, 40, 100, 500],
       adminComp,
@@ -913,7 +913,8 @@ export const genImageEndpoint: Endpoint = {
     const genUser = await loadGenUser(req, userId)
     const balanceCents = Number(genUser.genBalanceCents) || 0
     const adminComp = await userIsGenAdmin(req)
-    const useFree = !adminComp && model.free && mode === 't2i' && remainingFree > 0
+    const creditCost = model.free ? freeCreditCost(resolution) : 0
+    const useFree = !adminComp && model.free && remainingFree >= creditCost
     if (!adminComp && !useFree && balanceCents < priceCents) {
       const hint = model.free
         ? `Daily free gens are used. Add funds to keep generating ($${(priceCents / 100).toFixed(2)} each).`
@@ -950,7 +951,7 @@ export const genImageEndpoint: Endpoint = {
       const nextFiltered = filteredToday(genUser) + (outcome === 'filtered' ? 1 : 0)
       const nextRejects = rejectsToday(genUser) + (outcome === 'rejected' ? 1 : 0)
       const nextPenalties =
-        penaltySlotsForToday(genUser) + (outcome === 'filtered' && useFree && !adminComp ? 1 : 0)
+        penaltySlotsForToday(genUser) + (outcome === 'filtered' && useFree && !adminComp ? creditCost : 0)
       await saveSafetyDay(req, userId, {
         filtered: nextFiltered,
         rejects: nextRejects,
@@ -977,7 +978,7 @@ export const genImageEndpoint: Endpoint = {
         if (adminComp) {
           message = `${FILTERED_LEAD} Admin account · not charged.`
         } else if (useFree) {
-          message = `${FILTERED_LEAD} Used 1 free gen. ${remaining} left today.`
+          message = `${FILTERED_LEAD} Used ${creditCost} free credit${creditCost === 1 ? '' : 's'}. ${remaining} left today.`
         } else {
           message = `${FILTERED_LEAD} Used 1 ${model.label} gen (${money(priceCents)}). Balance ${money(nextBalance)}.`
         }
@@ -1044,7 +1045,7 @@ export const genImageEndpoint: Endpoint = {
     if (adminComp) {
       remaining = remainingFree
     } else if (useFree) {
-      remaining = Math.max(0, remainingFree - 1)
+      remaining = Math.max(0, remainingFree - creditCost)
     } else {
       chargedCents = priceCents
       nextBalance = balanceCents - priceCents
