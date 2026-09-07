@@ -260,10 +260,7 @@ export const genPinEndpoint: Endpoint = {
   },
 }
 
-export const communityEndpoint: Endpoint = {
-  path: '/community',
-  method: 'get',
-  handler: async (req: PayloadRequest) => {
+async function outpostHandler(req: PayloadRequest) {
     let page = 1
     let limit = 24
     let q = ''
@@ -344,12 +341,24 @@ export const communityEndpoint: Endpoint = {
       totalDocs: result.totalDocs,
       hasNextPage: Boolean(result.hasNextPage) || page * limit < Number(result.totalDocs || 0),
     })
-  },
+}
+
+export const outpostEndpoint: Endpoint = {
+  path: '/outpost',
+  method: 'get',
+  handler: outpostHandler,
+}
+
+export const communityEndpoint: Endpoint = {
+  path: '/community',
+  method: 'get',
+  handler: outpostHandler,
 }
 
 export const profileEndpoints: Endpoint[] = [
   profileGetEndpoint,
   profilePatchEndpoint,
   genPinEndpoint,
+  outpostEndpoint,
   communityEndpoint,
 ]

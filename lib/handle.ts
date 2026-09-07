@@ -12,6 +12,7 @@ const RESERVED = new Set([
   'u',
   'me',
   'community',
+  'outpost',
   'explore',
   'creators',
   'login',
