@@ -41,5 +41,24 @@ export const Generations: CollectionConfig = {
     { name: 'resolution', type: 'text' },
     { name: 'jobId', type: 'text', index: true },
     { name: 'sourceUrl', type: 'text' },
+    {
+      name: 'pinned',
+      type: 'checkbox',
+      defaultValue: false,
+      index: true,
+      admin: { description: 'Shown on the owner’s public profile and Community.' },
+    },
+    {
+      name: 'pinnedAt',
+      type: 'date',
+      index: true,
+      admin: { description: 'When the gen was pinned. Used to sort Community.' },
+    },
+    {
+      name: 'promptPublic',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: { description: 'If pinned, show the prompt on the public profile.' },
+    },
   ],
 }

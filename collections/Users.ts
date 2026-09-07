@@ -1,5 +1,6 @@
 import { APIError, type CollectionConfig } from 'payload'
 import { isAdmin, systemWrite } from '../lib/access'
+import { assertHandle, clipBio, normalizeHandle } from '../lib/handle'
 
 export const Users: CollectionConfig = {
   slug: 'users',
@@ -37,8 +38,31 @@ export const Users: CollectionConfig = {
       },
     ],
     beforeChange: [
-      ({ req, data, operation, context }) => {
-        if (!data || isAdmin(req.user)) return data
+      async ({ req, data, operation, originalDoc, context }) => {
+        if (!data) return data
+        if ('handle' in data) {
+          const handle = normalizeHandle(data.handle)
+          if (!handle) {
+            data.handle = null
+          } else {
+            assertHandle(handle)
+            data.handle = handle
+            const existing = await req.payload.find({
+              collection: 'users' as never,
+              overrideAccess: true,
+              depth: 0,
+              limit: 1,
+              where: { handle: { equals: handle } },
+            })
+            const other = existing.docs[0] as { id?: string } | undefined
+            const selfId = String(originalDoc?.id || (operation === 'update' ? req.user?.id : '') || '')
+            if (other?.id && String(other.id) !== selfId) {
+              throw new APIError('That handle is taken.', 400)
+            }
+          }
+        }
+        if (typeof data.bio === 'string') data.bio = clipBio(data.bio)
+        if (isAdmin(req.user)) return data
         if ((context as { systemQuota?: boolean } | undefined)?.systemQuota) return data
         if (req.payloadAPI !== 'REST') return data
         const next = { ...data }
@@ -89,6 +113,22 @@ export const Users: CollectionConfig = {
   },
   fields: [
     { name: 'name', type: 'text', required: true, maxLength: 80 },
+    {
+      name: 'handle',
+      type: 'text',
+      index: true,
+      minLength: 3,
+      maxLength: 24,
+      admin: {
+        description: 'Public URL: artrealmai.com/u/handle. Letters, numbers, underscores.',
+      },
+    },
+    {
+      name: 'bio',
+      type: 'textarea',
+      maxLength: 280,
+      admin: { description: 'Short public bio on /u/handle.' },
+    },
     { name: 'avatar', type: 'upload', relationTo: 'media' },
     {
       name: 'googleId',

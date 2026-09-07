@@ -698,6 +698,8 @@ export const genListEndpoint: Endpoint = {
           jobId?: string | null
           sourceUrl?: string | null
           createdAt?: string
+          pinned?: boolean | null
+          promptPublic?: boolean | null
         }
         return {
           id: row.id,
@@ -720,6 +722,8 @@ export const genListEndpoint: Endpoint = {
           jobId: row.jobId,
           sourceUrl: row.sourceUrl || undefined,
           createdAt: row.createdAt,
+          pinned: Boolean(row.pinned),
+          promptPublic: Boolean(row.promptPublic),
         }
       }),
     })
@@ -730,9 +734,6 @@ export const genFileEndpoint: Endpoint = {
   path: '/gen/file/:id',
   method: 'get',
   handler: async (req: PayloadRequest) => {
-    if (!req.user) {
-      return Response.json({ message: 'Sign in to download.' }, { status: 401 })
-    }
     const params = req.routeParams as { id?: unknown } | undefined
     const id = typeof params?.id === 'string' ? params.id : ''
     if (!id) {
@@ -745,16 +746,25 @@ export const genFileEndpoint: Endpoint = {
         id,
         depth: 0,
         overrideAccess: true,
-      })) as { url?: string; sourceUrl?: string; user?: string | { id?: string }; kind?: string; format?: string }
+      })) as {
+        url?: string
+        sourceUrl?: string
+        user?: string | { id?: string }
+        kind?: string
+        format?: string
+        pinned?: boolean | null
+      }
 
       const ownerId = typeof doc.user === 'string' ? doc.user : doc.user?.id
-      const isAdmin = Array.isArray((req.user as { roles?: string[] }).roles)
+      const isAdmin = Array.isArray((req.user as { roles?: string[] } | null)?.roles)
         && (req.user as { roles?: string[] }).roles?.includes('admin')
       const wantSource =
         String((req.query as { source?: unknown } | undefined)?.source || '') === '1' ||
         (typeof req.url === 'string' && /[?&]source=1(?:&|$)/.test(req.url))
       const fileUrl = wantSource ? doc.sourceUrl : doc.url
-      if (!fileUrl || (!isAdmin && ownerId !== String(req.user.id))) {
+      const isOwner = Boolean(req.user && ownerId === String(req.user.id))
+      const publicPin = Boolean(doc.pinned) && !wantSource
+      if (!fileUrl || (!isAdmin && !isOwner && !publicPin)) {
         return Response.json(
           { message: wantSource ? 'No source image stored for this generation.' : 'Image not found' },
           { status: 404 },
