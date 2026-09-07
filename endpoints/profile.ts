@@ -18,8 +18,10 @@ type GenRow = {
   width?: number | null
   height?: number | null
   format?: string | null
+  bytes?: number | null
   kind?: string | null
   durationSec?: number | null
+  durationMs?: number | null
   resolution?: string | null
   imageSize?: string | null
   createdAt?: string
@@ -45,12 +47,14 @@ function publicPin(row: GenRow, withUser?: ReturnType<typeof publicUser>) {
     url: row.url,
     kind: row.kind || 'image',
     format: row.format,
+    bytes: row.bytes,
     width: row.width,
     height: row.height,
     model: row.model,
     imageSize: row.imageSize,
     resolution: row.resolution,
     durationSec: row.durationSec,
+    durationMs: row.durationMs,
     createdAt: row.createdAt,
     pinnedAt: row.pinnedAt,
     promptPublic,
