@@ -263,9 +263,9 @@ function isPolicyFail(status: number, json: { error?: unknown; detail?: unknown;
 }
 
 const VIDEO_FILTERED_BILLED =
-  "That prompt was blocked by the model's safety checker after the run. This uses 1 gen because Fal billed that completed run even though you did not get the video."
+  "That prompt was blocked by the model's safety checker after the run. This uses 1 gen because the completed run was billed even though you did not get the video."
 const VIDEO_FILTERED_FREE =
-  "That prompt was blocked by the model's safety checker. Fal did not charge for this run, so this one is free."
+  "That prompt was blocked by the model's safety checker. This run was not charged, so this one is free."
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))

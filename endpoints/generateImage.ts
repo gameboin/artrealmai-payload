@@ -842,7 +842,7 @@ export const genImageEndpoint: Endpoint = {
     const falKey = process.env.FAL_KEY || ''
     if (!falKey) {
       return Response.json(
-        { message: 'Image generation is not connected yet. Add FAL_KEY on Vercel.' },
+        { message: 'Image generation is not connected yet.' },
         { status: 503 },
       )
     }
