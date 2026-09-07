@@ -14,6 +14,8 @@ type GenRow = {
   user?: unknown
   prompt?: string
   model?: string
+  modelId?: string | null
+  mode?: string | null
   url?: string
   width?: number | null
   height?: number | null
@@ -51,6 +53,8 @@ function publicPin(row: GenRow, withUser?: ReturnType<typeof publicUser>) {
     width: row.width,
     height: row.height,
     model: row.model,
+    modelId: row.modelId || undefined,
+    mode: row.mode || undefined,
     imageSize: row.imageSize,
     resolution: row.resolution,
     durationSec: row.durationSec,
@@ -268,11 +272,15 @@ async function outpostHandler(req: PayloadRequest) {
     let page = 1
     let limit = 24
     let q = ''
+    let kind = ''
+    let modelId = ''
     try {
       const url = new URL(typeof req.url === 'string' ? req.url : '', 'http://local')
       page = Math.max(1, Number(url.searchParams.get('page')) || 1)
       limit = Math.min(48, Math.max(1, Number(url.searchParams.get('limit')) || 24))
       q = normalizeHandle(url.searchParams.get('q')) || String(url.searchParams.get('q') || '').trim().toLowerCase()
+      kind = String(url.searchParams.get('kind') || '').trim().toLowerCase()
+      modelId = String(url.searchParams.get('model') || '').trim()
     } catch {
       /* defaults */
     }
@@ -281,6 +289,16 @@ async function outpostHandler(req: PayloadRequest) {
       { pinned: { equals: true } },
       { format: { not_equals: 'BLOCKED' } },
     ]
+
+    if (kind === 'video') {
+      clauses.push({ kind: { equals: 'video' } })
+    } else if (kind === 'image') {
+      clauses.push({ kind: { not_equals: 'video' } })
+    }
+
+    if (modelId) {
+      clauses.push({ modelId: { equals: modelId } })
+    }
 
     if (q) {
       const people = await req.payload.find({
