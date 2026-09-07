@@ -31,6 +31,7 @@ type GenRow = {
 function publicUser(row: UserRow) {
   return {
     handle: row.handle || '',
+    realm: row.handle || '',
     name: row.name || 'Creator',
     bio: row.bio || '',
     avatarUrl: avatarUrlOf(row.avatar),
@@ -74,7 +75,7 @@ export const profileGetEndpoint: Endpoint = {
     const params = req.routeParams as { handle?: unknown } | undefined
     const handle = normalizeHandle(params?.handle)
     if (!handle) {
-      return Response.json({ message: 'Missing handle.' }, { status: 400 })
+      return Response.json({ message: 'Missing realm.' }, { status: 400 })
     }
 
     const users = await req.payload.find({
@@ -130,8 +131,8 @@ export const profilePatchEndpoint: Endpoint = {
       if (!name) return Response.json({ message: 'Display name cannot be empty.' }, { status: 400 })
       data.name = name
     }
-    if ('handle' in body) {
-      const handle = normalizeHandle(body.handle)
+    if ('handle' in body || 'realm' in body) {
+      const handle = normalizeHandle(body.realm ?? body.handle)
       if (handle) assertHandle(handle)
       data.handle = handle
     }
@@ -149,6 +150,7 @@ export const profilePatchEndpoint: Endpoint = {
       return Response.json({
         ok: true,
         handle: updated.handle || '',
+        realm: updated.handle || '',
         name: updated.name || '',
         bio: updated.bio || '',
         avatarUrl: avatarUrlOf(updated.avatar),
@@ -204,7 +206,7 @@ export const genPinEndpoint: Endpoint = {
 
     if (wantPinned && !me.handle) {
       return Response.json(
-        { message: 'Set a public handle on your account before pinning gens to your profile.' },
+        { message: 'Set a public realm on your account before pinning gens to your profile.' },
         { status: 400 },
       )
     }
@@ -252,6 +254,7 @@ export const genPinEndpoint: Endpoint = {
       pinned: Boolean(updated.pinned),
       promptPublic: Boolean(updated.promptPublic),
       handle: me.handle || '',
+      realm: me.handle || '',
       profileUrl: me.handle ? `/u/${me.handle}` : '',
     })
   },

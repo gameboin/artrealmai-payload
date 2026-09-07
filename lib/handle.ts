@@ -58,12 +58,12 @@ export function normalizeHandle(raw: unknown): string | null {
 export function assertHandle(handle: string) {
   if (!new RegExp(`^[a-z0-9][a-z0-9_]{${HANDLE_MIN - 1},${HANDLE_MAX - 1}}$`).test(handle)) {
     throw new APIError(
-      `Handle must be ${HANDLE_MIN}–${HANDLE_MAX} characters: letters, numbers, and underscores, starting with a letter or number.`,
+      `Realm must be ${HANDLE_MIN}–${HANDLE_MAX} characters: letters, numbers, and underscores, starting with a letter or number.`,
       400,
     )
   }
   if (RESERVED.has(handle)) {
-    throw new APIError('That handle is reserved.', 400)
+    throw new APIError('That realm is reserved.', 400)
   }
 }
 

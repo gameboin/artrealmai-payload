@@ -40,6 +40,7 @@ export const Users: CollectionConfig = {
     beforeChange: [
       async ({ req, data, operation, originalDoc, context }) => {
         if (!data) return data
+        if ('realm' in data && !('handle' in data)) data.handle = data.realm
         if ('handle' in data) {
           const handle = normalizeHandle(data.handle)
           if (!handle) {
@@ -57,7 +58,7 @@ export const Users: CollectionConfig = {
             const other = existing.docs[0] as { id?: string } | undefined
             const selfId = String(originalDoc?.id || (operation === 'update' ? req.user?.id : '') || '')
             if (other?.id && String(other.id) !== selfId) {
-              throw new APIError('That handle is taken.', 400)
+              throw new APIError('That realm is taken.', 400)
             }
           }
         }
@@ -119,15 +120,16 @@ export const Users: CollectionConfig = {
       index: true,
       minLength: 3,
       maxLength: 24,
+      label: 'Realm',
       admin: {
-        description: 'Public URL: artrealmai.com/u/handle. Letters, numbers, underscores.',
+        description: 'Public URL: artrealmai.com/u/your_realm. Letters, numbers, underscores.',
       },
     },
     {
       name: 'bio',
       type: 'textarea',
       maxLength: 280,
-      admin: { description: 'Short public bio on /u/handle.' },
+      admin: { description: 'Short public bio on /u/your_realm.' },
     },
     { name: 'avatar', type: 'upload', relationTo: 'media' },
     {
