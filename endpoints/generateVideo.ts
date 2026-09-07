@@ -5,7 +5,15 @@ import { stripeCheckoutEnabled } from './stripeWallet'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { randomFileName } from '../lib/randomFile'
 
-type VideoKey = 'grokvid' | 'grokvid15' | 'h3turbo' | 'h3max'
+type VideoKey =
+  | 'grokvid'
+  | 'grokvid15'
+  | 'flux3t2vdraft'
+  | 'flux3t2v'
+  | 'flux3i2vdraft'
+  | 'flux3i2v'
+  | 'h3turbo'
+  | 'h3max'
 type VideoMode = 't2v' | 'i2v'
 
 type VideoModel = {
@@ -22,6 +30,9 @@ type VideoModel = {
   defaultDuration: number
   defaultResolution: string
 }
+
+const FLUX3_ASPECTS = ['21:9', '2:1', '16:9', '4:3', '1:1', '3:4', '9:16']
+const FLUX3_DURATIONS = [5, 6, 8, 10, 15, 20]
 
 const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
   grokvid: {
@@ -58,6 +69,68 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
     pricePerSec: { '480p': 13, '720p': 22, '1080p': 40 },
     defaultDuration: 5,
     defaultResolution: '480p',
+  },
+  flux3t2vdraft: {
+    key: 'flux3t2vdraft',
+    label: 'Flux 3 Text to Video Draft',
+    blurb: 'Fast 720p preview with audio',
+    falT2v: 'blackforestlabs/flux-3/text-to-video/draft',
+    falI2v: 'blackforestlabs/flux-3/text-to-video/draft',
+    modes: ['t2v'],
+    durations: [...FLUX3_DURATIONS],
+    resolutions: [{ id: '720p', label: '720p' }],
+    aspects: [...FLUX3_ASPECTS],
+    pricePerSec: { '720p': 6 },
+    defaultDuration: 5,
+    defaultResolution: '720p',
+  },
+  flux3t2v: {
+    key: 'flux3t2v',
+    label: 'Flux 3 Text to Video',
+    blurb: 'Full quality, 720p or 1080p, with audio',
+    falT2v: 'blackforestlabs/flux-3/text-to-video',
+    falI2v: 'blackforestlabs/flux-3/text-to-video',
+    modes: ['t2v'],
+    durations: [...FLUX3_DURATIONS],
+    resolutions: [
+      { id: '720p', label: '720p' },
+      { id: '1080p', label: '1080p' },
+    ],
+    aspects: [...FLUX3_ASPECTS],
+    pricePerSec: { '720p': 17, '1080p': 29 },
+    defaultDuration: 5,
+    defaultResolution: '720p',
+  },
+  flux3i2vdraft: {
+    key: 'flux3i2vdraft',
+    label: 'Flux 3 Image to Video Draft',
+    blurb: 'Fast 720p preview from a still, with audio',
+    falT2v: 'blackforestlabs/flux-3/image-to-video/draft',
+    falI2v: 'blackforestlabs/flux-3/image-to-video/draft',
+    modes: ['i2v'],
+    durations: [...FLUX3_DURATIONS],
+    resolutions: [{ id: '720p', label: '720p' }],
+    aspects: [...FLUX3_ASPECTS],
+    pricePerSec: { '720p': 6 },
+    defaultDuration: 5,
+    defaultResolution: '720p',
+  },
+  flux3i2v: {
+    key: 'flux3i2v',
+    label: 'Flux 3 Image to Video',
+    blurb: 'Full quality from a still, 720p or 1080p, with audio',
+    falT2v: 'blackforestlabs/flux-3/image-to-video',
+    falI2v: 'blackforestlabs/flux-3/image-to-video',
+    modes: ['i2v'],
+    durations: [...FLUX3_DURATIONS],
+    resolutions: [
+      { id: '720p', label: '720p' },
+      { id: '1080p', label: '1080p' },
+    ],
+    aspects: [...FLUX3_ASPECTS],
+    pricePerSec: { '720p': 17, '1080p': 29 },
+    defaultDuration: 5,
+    defaultResolution: '720p',
   },
   h3turbo: {
     key: 'h3turbo',
@@ -96,7 +169,7 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
 }
 
 const MAX_SOURCE_BYTES = 4 * 1024 * 1024
-const ASPECTS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'])
+const ASPECTS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9', '2:1'])
 
 type JobPayload = {
   requestId: string
@@ -236,9 +309,27 @@ function responseUrlFor(falId: string, requestId: string) {
   return `https://queue.fal.run/${queueRoot(falId)}/requests/${requestId}/response`
 }
 
+function isFlux3(key: string) {
+  return key === 'flux3t2vdraft' || key === 'flux3t2v' || key === 'flux3i2vdraft' || key === 'flux3i2v'
+}
+
+function isFlux3Draft(key: string) {
+  return key === 'flux3t2vdraft' || key === 'flux3i2vdraft'
+}
+
 function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect: string, duration: number, resolution: string, imageUrl?: string) {
   const body: Record<string, unknown> = { prompt, duration }
-  if (model.key === 'grokvid') {
+  if (isFlux3(model.key)) {
+    body.generate_audio = true
+    body.safety_tolerance = 4
+    if (!isFlux3Draft(model.key)) body.resolution = resolution
+    if (mode === 'i2v') {
+      body.aspect_ratio = 'auto'
+      if (imageUrl) body.image_url = imageUrl
+    } else if (aspect && aspect !== 'auto') {
+      body.aspect_ratio = aspect
+    }
+  } else if (model.key === 'grokvid') {
     body.resolution = resolution
     body.aspect_ratio = mode === 'i2v' ? 'auto' : aspect
     if (imageUrl) body.image_url = imageUrl
@@ -449,6 +540,14 @@ export const genVideoStartEndpoint: Endpoint = {
 
     const model = resolveVideoModel(body.model)
     const mode: VideoMode = body.mode === 'i2v' ? 'i2v' : 't2v'
+    if (!model.modes.includes(mode)) {
+      return Response.json(
+        {
+          message: `${model.label} does not support ${mode === 'i2v' ? 'image to video' : 'text to video'}.`,
+        },
+        { status: 400 },
+      )
+    }
     const requestedAspect =
       mode === 'i2v'
         ? 'auto'
@@ -469,7 +568,7 @@ export const genVideoStartEndpoint: Endpoint = {
         ? body.resolution
         : model.defaultResolution
     if (!model.durations.includes(duration)) {
-      return Response.json({ message: 'Pick a duration of 5, 6, 8, 10, or 15 seconds.' }, { status: 400 })
+      return Response.json({ message: 'Pick a supported clip length.' }, { status: 400 })
     }
     if (!model.resolutions.some((r) => r.id === resolution)) {
       return Response.json({ message: 'Pick a supported resolution.' }, { status: 400 })
