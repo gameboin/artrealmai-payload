@@ -1,5 +1,7 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { assertHandle, avatarUrlOf, clipBio, normalizeHandle, ownerIdOf, PIN_CAP } from '../lib/handle'
+import { userIsGenAdmin } from '../lib/genAdmin'
+import { deleteFromR2 } from './generateImage'
 
 type UserRow = {
   id: string
@@ -30,6 +32,7 @@ type GenRow = {
   pinned?: boolean | null
   pinnedAt?: string | null
   promptPublic?: boolean | null
+  sourceUrl?: string | null
 }
 
 function publicUser(row: UserRow) {
@@ -117,6 +120,7 @@ export const profileGetEndpoint: Endpoint = {
     return Response.json({
       ...profile,
       pins: (pins.docs as GenRow[]).map((doc) => publicPin(doc, profile)),
+      adminComp: await userIsGenAdmin(req),
     })
   },
 }
@@ -362,7 +366,50 @@ async function outpostHandler(req: PayloadRequest) {
       limit,
       totalDocs: result.totalDocs,
       hasNextPage: Boolean(result.hasNextPage) || page * limit < Number(result.totalDocs || 0),
+      adminComp: await userIsGenAdmin(req),
     })
+}
+
+export const outpostRemoveEndpoint: Endpoint = {
+  path: '/outpost/remove',
+  method: 'post',
+  handler: async (req: PayloadRequest) => {
+    if (!req.user) {
+      return Response.json({ message: 'Sign in to moderate Outpost.' }, { status: 401 })
+    }
+    if (!(await userIsGenAdmin(req))) {
+      return Response.json({ message: 'Not allowed.' }, { status: 403 })
+    }
+    const body = await readJson(req)
+    if (!body) {
+      return Response.json({ message: 'Invalid request body.' }, { status: 400 })
+    }
+    const id = typeof body.id === 'string' ? body.id.trim() : ''
+    if (!id) return Response.json({ message: 'Missing generation id.' }, { status: 400 })
+
+    let doc: GenRow
+    try {
+      doc = (await req.payload.findByID({
+        collection: 'generations' as never,
+        id,
+        depth: 0,
+        overrideAccess: true,
+      })) as GenRow
+    } catch {
+      return Response.json({ message: 'Generation not found.' }, { status: 404 })
+    }
+
+    if (doc.url) await deleteFromR2(doc.url)
+    if (doc.sourceUrl) await deleteFromR2(doc.sourceUrl)
+
+    await req.payload.delete({
+      collection: 'generations' as never,
+      id,
+      overrideAccess: true,
+    })
+
+    return Response.json({ ok: true, id })
+  },
 }
 
 export const outpostEndpoint: Endpoint = {
@@ -383,4 +430,5 @@ export const profileEndpoints: Endpoint[] = [
   genPinEndpoint,
   outpostEndpoint,
   communityEndpoint,
+  outpostRemoveEndpoint,
 ]

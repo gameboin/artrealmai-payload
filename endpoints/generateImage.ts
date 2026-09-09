@@ -489,7 +489,7 @@ async function persistToR2(buffer: Buffer, filename: string, contentType: string
   return `https://${domain}/${key}`
 }
 
-async function deleteFromR2(url: string) {
+export async function deleteFromR2(url: string) {
   const client = r2Client()
   const bucket = process.env.R2_BUCKET
   const domain = process.env.R2_PUBLIC_ACCESS_DOMAIN
@@ -811,7 +811,7 @@ export const genDeleteEndpoint: Endpoint = {
         id,
         depth: 0,
         overrideAccess: true,
-      })) as { url?: string; user?: string | { id?: string } }
+      })) as { url?: string; sourceUrl?: string | null; user?: string | { id?: string } }
 
       const ownerId = ownerIdOf(doc.user)
       if (!isAdminUser(req.user as { roles?: string[] }) && ownerId !== String(req.user.id)) {
@@ -819,6 +819,7 @@ export const genDeleteEndpoint: Endpoint = {
       }
 
       if (doc.url) await deleteFromR2(doc.url)
+      if (doc.sourceUrl) await deleteFromR2(doc.sourceUrl)
       await req.payload.delete({
         collection: 'generations' as never,
         id,
