@@ -52,6 +52,7 @@ const corsOrigins = [
 export default buildConfig({
   admin: {
     user: 'users',
+    theme: 'dark',
     importMap: { baseDir: path.resolve(dirname) },
   },
 

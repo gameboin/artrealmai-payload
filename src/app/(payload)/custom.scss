@@ -1,0 +1,10 @@
+html,
+body {
+  background-color: rgb(20, 20, 20);
+  color-scheme: dark;
+}
+
+html[data-theme='light'],
+html[data-theme='dark'] {
+  background-color: rgb(20, 20, 20);
+}
