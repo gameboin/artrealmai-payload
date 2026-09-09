@@ -1,5 +1,6 @@
 import { APIError, type CollectionConfig } from 'payload'
 import { adminOnly } from '../lib/access'
+import { notifyInbox } from '../lib/notify'
 
 const TOPICS = ['Advertising', 'Collaboration', 'Bug Report', 'General'] as const
 
@@ -27,6 +28,22 @@ export const ContactSubmissions: CollectionConfig = {
           throw new APIError('Pick a valid topic.', 400)
         }
         return data
+      },
+    ],
+    afterChange: [
+      async ({ operation, doc }) => {
+        if (operation !== 'create') return
+        const row = doc as { topic?: string; name?: string; email?: string; message?: string }
+        await notifyInbox({
+          subject: `Contact: ${row.topic || 'message'} from ${row.name || row.email || 'someone'}`,
+          text: [
+            `Topic: ${row.topic || '—'}`,
+            `Name: ${row.name || '—'}`,
+            `Email: ${row.email || '—'}`,
+            '',
+            row.message || '',
+          ].join('\n'),
+        })
       },
     ],
   },

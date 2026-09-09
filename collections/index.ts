@@ -10,6 +10,7 @@ import { SavedPrompts } from './SavedPrompts'
 import { SavedLogos } from './SavedLogos'
 // 1. Import the new Contact Submissions collection
 import { ContactSubmissions } from './ContactSubmissions'
+import { OutpostReports } from './OutpostReports'
 import { Generations } from './Generations'
 import { GenPurchases } from './GenPurchases'
 
@@ -26,6 +27,6 @@ export const collections = [
   PromptStyles,
   SavedPrompts,
   SavedLogos,
-  // 2. Register the collection in the export array
   ContactSubmissions,
+  OutpostReports,
 ]
