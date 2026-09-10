@@ -14,6 +14,9 @@ type ModelKey =
   | 'bananapro'
   | 'seedream45'
   | 'seedream5lite'
+  | 'seedream5pro'
+  | 'muse'
+  | 'mai25'
   | 'grok'
   | 'krea2'
 type GenMode = 't2i' | 'i2i'
@@ -36,6 +39,7 @@ type GenModel = {
 
 const COMMON_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']
 const KREA_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '4:5', '3:2', '2:3']
+const MUSE_ASPECTS = ['21:9', '16:9', '4:3', '3:2', '1:1', '2:3', '3:4', '9:16']
 
 const MODELS: Record<ModelKey, GenModel> = {
   flux2pro: {
@@ -136,6 +140,48 @@ const MODELS: Record<ModelKey, GenModel> = {
       { id: '3K', label: '3K', priceCents: 12 },
     ],
     defaultResolution: '2K',
+  },
+  seedream5pro: {
+    key: 'seedream5pro',
+    falId: 'bytedance/seedream/v5/pro/text-to-image',
+    falEditId: 'bytedance/seedream/v5/pro/edit',
+    label: 'Seedream 5.0 Pro',
+    blurb: 'Flagship layouts and text',
+    priceCents: 8,
+    free: false,
+    modes: ['t2i', 'i2i'],
+    aspects: [...COMMON_ASPECTS],
+    resolutions: [
+      { id: '2K', label: '2K', priceCents: 8 },
+      { id: '4K', label: '4K', priceCents: 15 },
+    ],
+    defaultResolution: '2K',
+  },
+  muse: {
+    key: 'muse',
+    falId: 'meta/muse-image/text-to-image',
+    falEditId: 'meta/muse-image/edit',
+    label: 'Muse Image',
+    blurb: 'Sharp text, cheap stills',
+    priceCents: 3,
+    free: false,
+    modes: ['t2i', 'i2i'],
+    aspects: [...MUSE_ASPECTS],
+    resolutions: [],
+    defaultResolution: '',
+  },
+  mai25: {
+    key: 'mai25',
+    falId: 'microsoft/mai-image-2.5',
+    falEditId: 'microsoft/mai-image-2.5/edit',
+    label: 'MAI Image 2.5',
+    blurb: 'Photoreal Microsoft stills',
+    priceCents: 8,
+    free: false,
+    modes: ['t2i', 'i2i'],
+    aspects: [...COMMON_ASPECTS],
+    resolutions: [],
+    defaultResolution: '',
   },
   grok: {
     key: 'grok',
@@ -289,7 +335,9 @@ function falPayload(
   imageUrl?: string,
 ) {
   const body: Record<string, unknown> = { prompt }
-  if (typeof seed === 'number' && model.key !== 'grok') body.seed = seed
+  if (typeof seed === 'number' && model.key !== 'grok' && model.key !== 'muse' && model.key !== 'mai25') {
+    body.seed = seed
+  }
 
   if (model.key === 'flux2pro') {
     body.image_size = imageUrl && resolution !== '2K' ? 'auto' : fluxImageSize(aspect, resolution)
@@ -317,6 +365,30 @@ function falPayload(
     body.num_images = 1
     body.max_images = 1
     body.enable_safety_checker = true
+    if (imageUrl) body.image_urls = [imageUrl]
+  } else if (model.key === 'seedream5pro') {
+    if (resolution === '4K') {
+      const size = seedreamImageSize(aspect)
+      const scale = Math.min(1, 2048 / size.width, 2048 / size.height)
+      body.image_size = {
+        width: Math.round(size.width * scale),
+        height: Math.round(size.height * scale),
+      }
+    } else {
+      body.image_size = 'auto_2K'
+    }
+    body.num_images = 1
+    body.enable_safety_checker = true
+    if (imageUrl) body.image_urls = [imageUrl]
+  } else if (model.key === 'muse') {
+    body.num_images = 1
+    body.output_format = 'jpeg'
+    if (imageUrl) body.image_urls = [imageUrl]
+    else body.aspect_ratio = aspect
+  } else if (model.key === 'mai25') {
+    body.num_images = 1
+    body.aspect_ratio = imageUrl ? 'auto' : aspect
+    body.output_format = 'jpeg'
     if (imageUrl) body.image_urls = [imageUrl]
   } else if (model.key === 'grok') {
     body.num_images = 1

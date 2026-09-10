@@ -14,6 +14,7 @@ type VideoKey =
   | 'flux3i2v'
   | 'h3turbo'
   | 'h3max'
+  | 'seedance2fast'
 type VideoMode = 't2v' | 'i2v'
 
 type VideoModel = {
@@ -165,6 +166,23 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
     pricePerSec: { '480P': 8, '768P': 13 },
     defaultDuration: 5,
     defaultResolution: '480P',
+  },
+  seedance2fast: {
+    key: 'seedance2fast',
+    label: 'Seedance 2.0 Fast',
+    blurb: 'Long clips with audio and camera, 4–15s',
+    falT2v: 'bytedance/seedance-2.0/fast/text-to-video',
+    falI2v: 'bytedance/seedance-2.0/fast/image-to-video',
+    modes: ['t2v', 'i2v'],
+    durations: [4, 5, 6, 8, 10, 12, 15],
+    resolutions: [
+      { id: '480p', label: '480p' },
+      { id: '720p', label: '720p' },
+    ],
+    aspects: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
+    pricePerSec: { '480p': 12, '720p': 25 },
+    defaultDuration: 5,
+    defaultResolution: '720p',
   },
 }
 
@@ -318,7 +336,20 @@ function isFlux3Draft(key: string) {
 }
 
 function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect: string, duration: number, resolution: string, imageUrl?: string) {
-  const body: Record<string, unknown> = { prompt, duration }
+  const body: Record<string, unknown> = { prompt }
+  if (model.key === 'seedance2fast') {
+    body.duration = String(duration)
+    body.resolution = resolution
+    body.generate_audio = true
+    if (mode === 'i2v') {
+      body.aspect_ratio = 'auto'
+      if (imageUrl) body.image_url = imageUrl
+    } else if (aspect && aspect !== 'auto') {
+      body.aspect_ratio = aspect
+    }
+    return body
+  }
+  body.duration = duration
   if (isFlux3(model.key)) {
     body.generate_audio = true
     body.safety_tolerance = 4
