@@ -7,7 +7,7 @@ export const Media: CollectionConfig = {
   slug: 'media',
   upload: {
     staticDir: 'media',
-    mimeTypes: ['image/*', 'video/*'], 
+    mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime'], 
     
     adminThumbnail: ({ doc }) => {
       const mimeType = doc?.mimeType as string
@@ -51,8 +51,8 @@ export const Media: CollectionConfig = {
         const file = req.file as { mimetype?: string; mimeType?: string; size?: number; filesize?: number } | undefined
         const mime = String(file?.mimetype || file?.mimeType || data?.mimeType || '')
         const size = Number(file?.size || file?.filesize || data?.filesize || 0)
-        if (mime && !mime.startsWith('image/')) {
-          throw new APIError('Account uploads must be images.', 400)
+        if (mime && !/^image\/(jpeg|jpg|png|webp|gif)$/i.test(mime)) {
+          throw new APIError('Account uploads must be JPEG, PNG, WebP, or GIF.', 400)
         }
         if (size > USER_UPLOAD_MAX) {
           throw new APIError('Images must be under 2 MB.', 400)

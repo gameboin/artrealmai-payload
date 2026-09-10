@@ -86,7 +86,7 @@ export default buildConfig({
   sharp,
 
   cors: corsOrigins,
-  csrf: [...corsOrigins, 'https://artrealmai-payload.onrender.com'].filter(Boolean),
+  csrf: corsOrigins,
 
   plugins: [
     s3Storage({

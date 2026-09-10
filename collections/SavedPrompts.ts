@@ -25,8 +25,8 @@ export const SavedPrompts: CollectionConfig = {
     },
   },
   fields: [
-    { name: 'title', type: 'text', required: true },
-    { name: 'prompt', type: 'textarea', required: true },
+    { name: 'title', type: 'text', required: true, maxLength: 120 },
+    { name: 'prompt', type: 'textarea', required: true, maxLength: 20000 },
     { 
       name: 'user', 
       type: 'relationship', 

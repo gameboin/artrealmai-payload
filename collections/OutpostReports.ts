@@ -27,6 +27,20 @@ export const OutpostReports: CollectionConfig = {
         if (typeof data.reason === 'string' && !REASONS.includes(data.reason as (typeof REASONS)[number])) {
           throw new APIError('Pick a valid reason.', 400)
         }
+        if (typeof data.pinId === 'string' && !/^[a-zA-Z0-9]{8,64}$/.test(data.pinId.trim())) {
+          throw new APIError('Invalid generation id.', 400)
+        }
+        if (typeof data.pinUrl === 'string' && data.pinUrl) {
+          try {
+            const parsed = new URL(data.pinUrl)
+            if (parsed.protocol !== 'https:') throw new Error('bad')
+            data.pinUrl = parsed.href.slice(0, 500)
+          } catch {
+            throw new APIError('Invalid media URL.', 400)
+          }
+        }
+        if (typeof data.realm === 'string') data.realm = data.realm.replace(/[^a-z0-9_]/gi, '').slice(0, 24)
+        if (typeof data.note === 'string') data.note = data.note.slice(0, 500)
         return data
       },
     ],

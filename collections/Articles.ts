@@ -27,6 +27,10 @@ export const Articles: CollectionConfig = {
       name: 'markdownImport',
       type: 'textarea',
       label: '⚡ Markdown Importer',
+      access: {
+        read: adminOnly,
+        update: adminOnly,
+      },
       admin: {
         description: 'Paste raw markdown here. The system will auto-clean wrapping tags.',
         position: 'sidebar',
@@ -38,6 +42,10 @@ export const Articles: CollectionConfig = {
       type: 'checkbox',
       label: 'Run Convert on Save',
       defaultValue: false,
+      access: {
+        read: adminOnly,
+        update: adminOnly,
+      },
       admin: {
         position: 'sidebar',
         description: 'WARNING: This overwrites existing content!',
