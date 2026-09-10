@@ -1,10 +1,11 @@
 import { GlobalConfig } from 'payload'
+import { adminOnly } from '../lib/access'
 
 export const GlossaryImporter: GlobalConfig = {
   slug: 'glossary-importer',
   access: {
-    read: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
+    read: adminOnly,
+    update: adminOnly,
   },
   fields: [
     {

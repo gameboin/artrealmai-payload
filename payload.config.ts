@@ -27,7 +27,7 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 const payloadSecret = process.env.PAYLOAD_SECRET || ''
-if (!payloadSecret && process.env.VERCEL) {
+if (!payloadSecret && (process.env.VERCEL || process.env.NODE_ENV === 'production')) {
   throw new Error('PAYLOAD_SECRET is required')
 }
 
