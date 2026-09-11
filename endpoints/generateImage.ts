@@ -17,6 +17,7 @@ type ModelKey =
   | 'seedream5pro'
   | 'muse'
   | 'mai25'
+  | 'gptimage25'
   | 'grok'
   | 'krea2'
 type GenMode = 't2i' | 'i2i'
@@ -183,6 +184,22 @@ const MODELS: Record<ModelKey, GenModel> = {
     resolutions: [],
     defaultResolution: '',
   },
+  gptimage25: {
+    key: 'gptimage25',
+    falId: 'openai/gpt-image-2.5/flare/text-to-image',
+    falEditId: 'openai/gpt-image-2.5/flare/edit',
+    label: 'GPT Image 2.5',
+    blurb: 'OpenAI stills, medium or high',
+    priceCents: 8,
+    free: false,
+    modes: ['t2i', 'i2i'],
+    aspects: [...COMMON_ASPECTS],
+    resolutions: [
+      { id: 'medium', label: 'Medium', priceCents: 8 },
+      { id: 'high', label: 'High', priceCents: 12 },
+    ],
+    defaultResolution: 'medium',
+  },
   grok: {
     key: 'grok',
     falId: 'xai/grok-imagine-image',
@@ -300,6 +317,16 @@ function fluxImageSize(aspect: string, resolution?: string) {
   return 'square_hd'
 }
 
+function gptImageSize(aspect: string) {
+  if (aspect === '16:9') return { width: 1280, height: 720 }
+  if (aspect === '9:16') return { width: 720, height: 1280 }
+  if (aspect === '4:3') return { width: 1024, height: 768 }
+  if (aspect === '3:4') return { width: 768, height: 1024 }
+  if (aspect === '3:2') return { width: 1152, height: 768 }
+  if (aspect === '2:3') return { width: 768, height: 1152 }
+  return { width: 1024, height: 1024 }
+}
+
 function seedreamImageSize(aspect: string, resolution?: string) {
   let size =
     aspect === '16:9'
@@ -335,7 +362,13 @@ function falPayload(
   imageUrl?: string,
 ) {
   const body: Record<string, unknown> = { prompt }
-  if (typeof seed === 'number' && model.key !== 'grok' && model.key !== 'muse' && model.key !== 'mai25') {
+  if (
+    typeof seed === 'number' &&
+    model.key !== 'grok' &&
+    model.key !== 'muse' &&
+    model.key !== 'mai25' &&
+    model.key !== 'gptimage25'
+  ) {
     body.seed = seed
   }
 
@@ -389,6 +422,13 @@ function falPayload(
     body.num_images = 1
     body.aspect_ratio = imageUrl ? 'auto' : aspect
     body.output_format = 'jpeg'
+    if (imageUrl) body.image_urls = [imageUrl]
+  } else if (model.key === 'gptimage25') {
+    body.num_images = 1
+    body.quality = resolution === 'high' ? 'high' : 'medium'
+    body.image_size = gptImageSize(aspect)
+    body.output_format = 'jpeg'
+    body.background = 'auto'
     if (imageUrl) body.image_urls = [imageUrl]
   } else if (model.key === 'grok') {
     body.num_images = 1
