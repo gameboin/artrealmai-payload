@@ -76,7 +76,7 @@ export const genCheckoutEndpoint: Endpoint = {
             unit_amount: cents,
             product_data: {
               name: `ArtRealmAI Gen funds ($${dollars})`,
-              description: 'USD balance for image generation after your daily free gens.',
+              description: 'USD wallet for Gen images and video after any free Klein credits.',
             },
           },
         },
@@ -120,64 +120,86 @@ export const genStripeWebhookEndpoint: Endpoint = {
       return Response.json({ message: 'Invalid Stripe signature.' }, { status: 400 })
     }
 
-    if (event.type !== 'checkout.session.completed') {
+    if (
+      event.type !== 'checkout.session.completed' &&
+      event.type !== 'checkout.session.async_payment_succeeded'
+    ) {
       return Response.json({ received: true })
     }
 
     const session = event.data.object as Stripe.Checkout.Session
-    if (session.payment_status && session.payment_status !== 'paid') {
-      return Response.json({ received: true })
-    }
-
-    const referenceId = typeof session.client_reference_id === 'string' ? session.client_reference_id : ''
-    const metaUserId = typeof session.metadata?.userId === 'string' ? session.metadata.userId : ''
-    if (referenceId && metaUserId && referenceId !== metaUserId) {
-      return Response.json({ received: true, ignored: 'user mismatch' })
-    }
-    const userId = referenceId || metaUserId
-    const amountCents = Number(session.amount_total)
-    if (!userId || !Number.isFinite(amountCents) || amountCents < 1) {
-      return Response.json({ received: true })
-    }
-
-    const existing = await req.payload.find({
-      collection: 'gen-purchases' as never,
-      overrideAccess: true,
-      limit: 1,
-      where: { stripeSessionId: { equals: session.id } },
-    })
-    if (existing.docs.length) {
-      return Response.json({ received: true, duplicate: true })
-    }
-
-    const user = (await req.payload.findByID({
-      collection: 'users',
-      id: userId,
-      depth: 0,
-      overrideAccess: true,
-    })) as { genBalanceCents?: number | null }
-
-    await req.payload.create({
-      collection: 'gen-purchases' as never,
-      overrideAccess: true,
-      data: {
-        user: userId,
-        amountCents,
-        stripeSessionId: session.id,
-      } as never,
-    })
-
-    await req.payload.update({
-      collection: 'users',
-      id: userId,
-      overrideAccess: true,
-      data: {
-        genBalanceCents: (Number(user.genBalanceCents) || 0) + amountCents,
-      } as never,
-    })
-
+    await fulfillCheckout(req, session)
     return Response.json({ received: true })
   },
+}
+
+async function fulfillCheckout(req: PayloadRequest, session: Stripe.Checkout.Session) {
+  if (session.mode && session.mode !== 'payment') return
+  if (session.currency && session.currency !== 'usd') return
+  if (session.payment_status && session.payment_status !== 'paid') return
+
+  const referenceId = typeof session.client_reference_id === 'string' ? session.client_reference_id : ''
+  const metaUserId = typeof session.metadata?.userId === 'string' ? session.metadata.userId : ''
+  if (referenceId && metaUserId && referenceId !== metaUserId) return
+  const userId = referenceId || metaUserId
+  const amountCents = Number(session.amount_total)
+  if (!userId || !Number.isFinite(amountCents) || amountCents < 1) return
+
+  const existing = await req.payload.find({
+    collection: 'gen-purchases' as never,
+    overrideAccess: true,
+    limit: 1,
+    where: { stripeSessionId: { equals: session.id } },
+  })
+  let purchase = existing.docs[0] as { id: string; credited?: boolean | null } | undefined
+  if (purchase && purchase.credited !== false) return
+
+  if (!purchase) {
+    try {
+      purchase = (await req.payload.create({
+        collection: 'gen-purchases' as never,
+        overrideAccess: true,
+        data: {
+          user: userId,
+          amountCents,
+          stripeSessionId: session.id,
+          credited: false,
+        } as never,
+      })) as { id: string; credited?: boolean | null }
+    } catch {
+      const again = await req.payload.find({
+        collection: 'gen-purchases' as never,
+        overrideAccess: true,
+        limit: 1,
+        where: { stripeSessionId: { equals: session.id } },
+      })
+      purchase = again.docs[0] as { id: string; credited?: boolean | null } | undefined
+      if (!purchase || purchase.credited !== false) return
+    }
+  }
+
+  const user = (await req.payload.findByID({
+    collection: 'users',
+    id: userId,
+    depth: 0,
+    overrideAccess: true,
+  })) as { genBalanceCents?: number | null }
+
+  await req.payload.update({
+    collection: 'users',
+    id: userId,
+    overrideAccess: true,
+    data: {
+      genBalanceCents: (Number(user.genBalanceCents) || 0) + amountCents,
+    } as never,
+  })
+
+  await req.payload.update({
+    collection: 'gen-purchases' as never,
+    id: purchase.id,
+    overrideAccess: true,
+    data: { credited: true } as never,
+  })
 }
 
 export const stripeWalletEndpoints: Endpoint[] = [genCheckoutEndpoint, genStripeWebhookEndpoint]

@@ -27,5 +27,11 @@ export const GenPurchases: CollectionConfig = {
       unique: true,
       index: true,
     },
+    {
+      name: 'credited',
+      type: 'checkbox',
+      defaultValue: true,
+      admin: { description: 'Wallet already increased for this Checkout session.' },
+    },
   ],
 }
