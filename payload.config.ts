@@ -93,7 +93,9 @@ export default buildConfig({
       collections: {
         media: {
           generateFileURL: ({ filename }) =>
-            `https://${process.env.R2_PUBLIC_ACCESS_DOMAIN}/${filename}`,
+            filename && filename !== 'undefined'
+              ? `https://${process.env.R2_PUBLIC_ACCESS_DOMAIN}/${filename}`
+              : '',
         },
         files: {
           prefix: 'downloads',
