@@ -7,12 +7,26 @@ export const Media: CollectionConfig = {
   slug: 'media',
   upload: {
     staticDir: 'media',
-    mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime'], 
-    
+    mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime'],
+
+    imageSizes: [
+      {
+        name: 'card',
+        width: 360,
+        height: 240,
+        position: 'centre',
+        withoutEnlargement: false,
+        formatOptions: {
+          format: 'webp',
+          options: { quality: 78 },
+        },
+      },
+    ],
+
     adminThumbnail: ({ doc }) => {
       const mimeType = doc?.mimeType as string
       if (mimeType?.includes('image')) {
-        return 'thumbnail'
+        return 'card'
       }
       return null
     },
