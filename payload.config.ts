@@ -21,7 +21,8 @@ import { generateImageEndpoints } from './endpoints/generateImage'
 import { generateVideoEndpoints } from './endpoints/generateVideo'
 import { stripeWalletEndpoints } from './endpoints/stripeWallet'
 import { logoLayerEndpoints } from './endpoints/logoLayer'
-import { profileEndpoints } from './endpoints/profile' 
+import { profileEndpoints } from './endpoints/profile'
+import { regenerateCardSizesEndpoints } from './endpoints/regenerateCardSizes' 
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -61,7 +62,7 @@ export default buildConfig({
   },
 
   collections: collections,
-  endpoints: [...googleAuthEndpoints, fileDownloadEndpoint, ...generateImageEndpoints, ...generateVideoEndpoints, ...stripeWalletEndpoints, ...logoLayerEndpoints, ...profileEndpoints], 
+  endpoints: [...googleAuthEndpoints, fileDownloadEndpoint, ...generateImageEndpoints, ...generateVideoEndpoints, ...stripeWalletEndpoints, ...logoLayerEndpoints, ...profileEndpoints, ...regenerateCardSizesEndpoints], 
 
   globals: [
     GlossaryImporter,
