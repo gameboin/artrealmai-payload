@@ -32,7 +32,11 @@ if (!payloadSecret && (process.env.VERCEL || process.env.NODE_ENV === 'productio
   throw new Error('PAYLOAD_SECRET is required')
 }
 
-const siteOrigins = ['https://artrealmai.com', 'https://www.artrealmai.com']
+const siteOrigins = [
+  'https://artrealmai.com',
+  'https://www.artrealmai.com',
+  'https://artrealmai-payload.vercel.app',
+]
 const localOrigins = [
   'http://localhost:3000',
   'http://localhost:5500',

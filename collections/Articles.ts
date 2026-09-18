@@ -44,13 +44,14 @@ export const Articles: CollectionConfig = {
     },
     {
       name: 'slug',
+      label: 'URL slug',
       type: 'text',
       unique: true,
       required: true,
       index: true,
       admin: {
         position: 'sidebar',
-        description: 'Public URL: artrealmai.com/article/this-slug. Auto-filled from the title if left blank.',
+        description: 'Public URL: artrealmai.com/article/this-slug. Auto-filled from the title if left blank. Keep this under Tags.',
       },
     },
     {
