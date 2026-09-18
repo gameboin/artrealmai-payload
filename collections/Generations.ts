@@ -30,6 +30,11 @@ export const Generations: CollectionConfig = {
     { name: 'imageSize', type: 'text' },
     { name: 'seed', type: 'number' },
     { name: 'url', type: 'text', required: true },
+    {
+      name: 'thumbUrl',
+      type: 'text',
+      admin: { description: '360×360 WebP for Outpost / profile grids. Full file stays on url.' },
+    },
     { name: 'width', type: 'number' },
     { name: 'height', type: 'number' },
     { name: 'format', type: 'text' },

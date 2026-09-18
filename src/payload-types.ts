@@ -70,13 +70,17 @@ export interface Config {
     users: User;
     media: Media;
     files: File;
+    generations: Generation;
+    'gen-purchases': GenPurchase;
     articles: Article;
     tags: Tag;
     authors: Author;
     'glossary-terms': GlossaryTerm;
     'prompt-styles': PromptStyle;
     'saved-prompts': SavedPrompt;
+    'saved-logos': SavedLogo;
     'contact-submissions': ContactSubmission;
+    'outpost-reports': OutpostReport;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -87,13 +91,17 @@ export interface Config {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     files: FilesSelect<false> | FilesSelect<true>;
+    generations: GenerationsSelect<false> | GenerationsSelect<true>;
+    'gen-purchases': GenPurchasesSelect<false> | GenPurchasesSelect<true>;
     articles: ArticlesSelect<false> | ArticlesSelect<true>;
     tags: TagsSelect<false> | TagsSelect<true>;
     authors: AuthorsSelect<false> | AuthorsSelect<true>;
     'glossary-terms': GlossaryTermsSelect<false> | GlossaryTermsSelect<true>;
     'prompt-styles': PromptStylesSelect<false> | PromptStylesSelect<true>;
     'saved-prompts': SavedPromptsSelect<false> | SavedPromptsSelect<true>;
+    'saved-logos': SavedLogosSelect<false> | SavedLogosSelect<true>;
     'contact-submissions': ContactSubmissionsSelect<false> | ContactSubmissionsSelect<true>;
+    'outpost-reports': OutpostReportsSelect<false> | OutpostReportsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -142,14 +150,36 @@ export interface UserAuthOperations {
 export interface User {
   id: string;
   name: string;
+  /**
+   * Public URL: artrealmai.com/u/your_realm. Letters, numbers, underscores.
+   */
+  handle?: string | null;
+  /**
+   * Short public bio on /u/your_realm.
+   */
+  bio?: string | null;
   avatar?: (string | null) | Media;
   /**
    * Set automatically when the user signs in with Google.
    */
   googleId?: string | null;
   roles?: ('user' | 'admin')[] | null;
+  genFailStreak?: number | null;
+  genPenaltySlots?: number | null;
+  genPenaltyDay?: string | null;
+  genBlockCount?: number | null;
+  genRejectCount?: number | null;
+  /**
+   * USD wallet in cents. Changed only by Stripe webhooks and paid gens.
+   */
+  genBalanceCents?: number | null;
+  logoLayerDay?: string | null;
+  logoLayerBatches?: number | null;
   updatedAt: string;
   createdAt: string;
+  enableAPIKey?: boolean | null;
+  apiKey?: string | null;
+  apiKeyIndex?: string | null;
   email: string;
   resetPasswordToken?: string | null;
   resetPasswordExpiration?: string | null;
@@ -217,6 +247,70 @@ export interface File {
   filesize?: number | null;
   width?: number | null;
   height?: number | null;
+}
+/**
+ * Images created on /gen. Written only by the generate API.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "generations".
+ */
+export interface Generation {
+  id: string;
+  user: string | User;
+  prompt: string;
+  model: string;
+  modelId?: string | null;
+  mode?: string | null;
+  imageSize?: string | null;
+  seed?: number | null;
+  url: string;
+  /**
+   * 360×360 WebP for Outpost / profile grids. Full file stays on url.
+   */
+  thumbUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+  format?: string | null;
+  bytes?: number | null;
+  chargedCents?: number | null;
+  durationMs?: number | null;
+  kind?: string | null;
+  durationSec?: number | null;
+  resolution?: string | null;
+  jobId?: string | null;
+  sourceUrl?: string | null;
+  /**
+   * Shown on the owner’s public profile and Community.
+   */
+  pinned?: boolean | null;
+  /**
+   * When the gen was pinned. Used to sort Community.
+   */
+  pinnedAt?: string | null;
+  /**
+   * If pinned, show the prompt on the public profile.
+   */
+  promptPublic?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Stripe Checkout payments that added Gen wallet funds.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "gen-purchases".
+ */
+export interface GenPurchase {
+  id: string;
+  user: string | User;
+  amountCents: number;
+  stripeSessionId: string;
+  /**
+   * Wallet already increased for this Checkout session.
+   */
+  credited?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -384,6 +478,21 @@ export interface SavedPrompt {
   createdAt: string;
 }
 /**
+ * User-saved overlay logos for Logo Layer Image.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "saved-logos".
+ */
+export interface SavedLogo {
+  id: string;
+  title: string;
+  thumb: string;
+  dataUrl: string;
+  user: string | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "contact-submissions".
  */
@@ -393,6 +502,26 @@ export interface ContactSubmission {
   name: string;
   email: string;
   message: string;
+  website?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * Public reports of Outpost pins. Review, then remove the pin if needed.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "outpost-reports".
+ */
+export interface OutpostReport {
+  id: string;
+  reason: 'illegal' | 'spam' | 'other';
+  pinId: string;
+  pinUrl?: string | null;
+  realm?: string | null;
+  kind?: string | null;
+  note?: string | null;
+  reporter?: (string | null) | User;
+  website?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -433,6 +562,14 @@ export interface PayloadLockedDocument {
         value: string | File;
       } | null)
     | ({
+        relationTo: 'generations';
+        value: string | Generation;
+      } | null)
+    | ({
+        relationTo: 'gen-purchases';
+        value: string | GenPurchase;
+      } | null)
+    | ({
         relationTo: 'articles';
         value: string | Article;
       } | null)
@@ -457,8 +594,16 @@ export interface PayloadLockedDocument {
         value: string | SavedPrompt;
       } | null)
     | ({
+        relationTo: 'saved-logos';
+        value: string | SavedLogo;
+      } | null)
+    | ({
         relationTo: 'contact-submissions';
         value: string | ContactSubmission;
+      } | null)
+    | ({
+        relationTo: 'outpost-reports';
+        value: string | OutpostReport;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -508,11 +653,24 @@ export interface PayloadMigration {
  */
 export interface UsersSelect<T extends boolean = true> {
   name?: T;
+  handle?: T;
+  bio?: T;
   avatar?: T;
   googleId?: T;
   roles?: T;
+  genFailStreak?: T;
+  genPenaltySlots?: T;
+  genPenaltyDay?: T;
+  genBlockCount?: T;
+  genRejectCount?: T;
+  genBalanceCents?: T;
+  logoLayerDay?: T;
+  logoLayerBatches?: T;
   updatedAt?: T;
   createdAt?: T;
+  enableAPIKey?: T;
+  apiKey?: T;
+  apiKeyIndex?: T;
   email?: T;
   resetPasswordToken?: T;
   resetPasswordExpiration?: T;
@@ -545,6 +703,20 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+  sizes?:
+    | T
+    | {
+        card?:
+          | T
+          | {
+              url?: T;
+              width?: T;
+              height?: T;
+              mimeType?: T;
+              filesize?: T;
+              filename?: T;
+            };
+      };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -562,6 +734,49 @@ export interface FilesSelect<T extends boolean = true> {
   filesize?: T;
   width?: T;
   height?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "generations_select".
+ */
+export interface GenerationsSelect<T extends boolean = true> {
+  user?: T;
+  prompt?: T;
+  model?: T;
+  modelId?: T;
+  mode?: T;
+  imageSize?: T;
+  seed?: T;
+  url?: T;
+  thumbUrl?: T;
+  width?: T;
+  height?: T;
+  format?: T;
+  bytes?: T;
+  chargedCents?: T;
+  durationMs?: T;
+  kind?: T;
+  durationSec?: T;
+  resolution?: T;
+  jobId?: T;
+  sourceUrl?: T;
+  pinned?: T;
+  pinnedAt?: T;
+  promptPublic?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "gen-purchases_select".
+ */
+export interface GenPurchasesSelect<T extends boolean = true> {
+  user?: T;
+  amountCents?: T;
+  stripeSessionId?: T;
+  credited?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -653,6 +868,18 @@ export interface SavedPromptsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "saved-logos_select".
+ */
+export interface SavedLogosSelect<T extends boolean = true> {
+  title?: T;
+  thumb?: T;
+  dataUrl?: T;
+  user?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "contact-submissions_select".
  */
 export interface ContactSubmissionsSelect<T extends boolean = true> {
@@ -660,6 +887,23 @@ export interface ContactSubmissionsSelect<T extends boolean = true> {
   name?: T;
   email?: T;
   message?: T;
+  website?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "outpost-reports_select".
+ */
+export interface OutpostReportsSelect<T extends boolean = true> {
+  reason?: T;
+  pinId?: T;
+  pinUrl?: T;
+  realm?: T;
+  kind?: T;
+  note?: T;
+  reporter?: T;
+  website?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -1,9 +1,9 @@
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
-import { 
+import {
   lexicalEditor,
   FixedToolbarFeature,
   InlineToolbarFeature,
-  BlocksFeature, 
+  BlocksFeature,
 } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 import { s3Storage } from '@payloadcms/storage-s3'
 
-import { collections } from './collections' 
+import { collections } from './collections'
 import { GlossaryImporter } from './globals/GlossaryImporter'
 import { Homepage } from './globals/Homepage'
 import { CodeBlock } from './blocks/CodeBlock'
@@ -23,7 +23,8 @@ import { generateVideoEndpoints } from './endpoints/generateVideo'
 import { stripeWalletEndpoints } from './endpoints/stripeWallet'
 import { logoLayerEndpoints } from './endpoints/logoLayer'
 import { profileEndpoints } from './endpoints/profile'
-import { regenerateCardSizesEndpoints } from './endpoints/regenerateCardSizes' 
+import { regenerateCardSizesEndpoints } from './endpoints/regenerateCardSizes'
+import { regenerateGenThumbsEndpoints } from './endpoints/regenerateGenThumbs'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -70,7 +71,7 @@ export default buildConfig({
   },
 
   collections: collections,
-  endpoints: [...googleAuthEndpoints, fileDownloadEndpoint, ...generateImageEndpoints, ...generateVideoEndpoints, ...stripeWalletEndpoints, ...logoLayerEndpoints, ...profileEndpoints, ...regenerateCardSizesEndpoints], 
+  endpoints: [...googleAuthEndpoints, fileDownloadEndpoint, ...generateImageEndpoints, ...generateVideoEndpoints, ...stripeWalletEndpoints, ...logoLayerEndpoints, ...profileEndpoints, ...regenerateCardSizesEndpoints, ...regenerateGenThumbsEndpoints],
 
   globals: [
     Homepage,
@@ -82,7 +83,7 @@ export default buildConfig({
       ...defaultFeatures,
       FixedToolbarFeature(),
       InlineToolbarFeature(),
-      
+
       // REGISTER CUSTOM BLOCK
       BlocksFeature({
         blocks: [CodeBlock, DownloadBlock],

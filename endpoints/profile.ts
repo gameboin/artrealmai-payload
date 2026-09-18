@@ -2,6 +2,7 @@ import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'pay
 import { assertHandle, avatarUrlOf, clipBio, normalizeHandle, ownerIdOf, PIN_CAP } from '../lib/handle'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { deleteFromR2 } from './generateImage'
+import { isVideoGen, makeGenThumbFromUrl } from '../lib/genThumb'
 
 type UserRow = {
   id: string
@@ -19,6 +20,7 @@ type GenRow = {
   modelId?: string | null
   mode?: string | null
   url?: string
+  thumbUrl?: string | null
   width?: number | null
   height?: number | null
   format?: string | null
@@ -50,6 +52,7 @@ function publicPin(row: GenRow, withUser?: ReturnType<typeof publicUser>) {
   return {
     id: row.id,
     url: row.url,
+    thumbUrl: row.thumbUrl || undefined,
     kind: row.kind || 'image',
     format: row.format,
     bytes: row.bytes,
@@ -247,6 +250,10 @@ export const genPinEndpoint: Endpoint = {
 
     const nextPinned = wantPinned
     const nextPromptPublic = nextPinned ? (wantPromptPublic ?? Boolean(doc.promptPublic)) : false
+    let thumbUrl = doc.thumbUrl || ''
+    if (nextPinned && !thumbUrl && doc.url && !isVideoGen(doc.kind, doc.format)) {
+      thumbUrl = (await makeGenThumbFromUrl(doc.url)) || ''
+    }
 
     const updated = (await req.payload.update({
       collection: 'generations' as never,
@@ -257,6 +264,7 @@ export const genPinEndpoint: Endpoint = {
         pinned: nextPinned,
         pinnedAt: nextPinned ? doc.pinnedAt || new Date().toISOString() : null,
         promptPublic: nextPromptPublic,
+        ...(thumbUrl ? { thumbUrl } : {}),
       } as never,
     })) as GenRow
 
@@ -400,6 +408,7 @@ export const outpostRemoveEndpoint: Endpoint = {
     }
 
     if (doc.url) await deleteFromR2(doc.url)
+    if (doc.thumbUrl) await deleteFromR2(doc.thumbUrl)
     if (doc.sourceUrl) await deleteFromR2(doc.sourceUrl)
 
     await req.payload.delete({

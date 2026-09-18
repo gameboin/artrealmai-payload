@@ -4,6 +4,7 @@ import { stripeCheckoutEnabled } from './stripeWallet'
 import { publicVideoModels } from './generateVideo'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { randomFileName } from '../lib/randomFile'
+import { makeGenThumbFromBuffer } from '../lib/genThumb'
 
 const DAILY_LIMIT = 4
 
@@ -796,6 +797,7 @@ export const genListEndpoint: Endpoint = {
           modelId?: string | null
           mode?: string | null
           url?: string
+          thumbUrl?: string | null
           seed?: number | null
           imageSize?: string | null
           width?: number | null
@@ -820,6 +822,7 @@ export const genListEndpoint: Endpoint = {
           modelId: row.modelId,
           mode: row.mode,
           url: row.url,
+          thumbUrl: row.thumbUrl || undefined,
           seed: row.seed,
           imageSize: row.imageSize,
           width: row.width,
@@ -923,7 +926,7 @@ export const genDeleteEndpoint: Endpoint = {
         id,
         depth: 0,
         overrideAccess: true,
-      })) as { url?: string; sourceUrl?: string | null; user?: string | { id?: string } }
+      })) as { url?: string; thumbUrl?: string | null; sourceUrl?: string | null; user?: string | { id?: string } }
 
       const ownerId = ownerIdOf(doc.user)
       if (!isAdminUser(req.user as { roles?: string[] }) && ownerId !== String(req.user.id)) {
@@ -931,6 +934,7 @@ export const genDeleteEndpoint: Endpoint = {
       }
 
       if (doc.url) await deleteFromR2(doc.url)
+      if (doc.thumbUrl) await deleteFromR2(doc.thumbUrl)
       if (doc.sourceUrl) await deleteFromR2(doc.sourceUrl)
       await req.payload.delete({
         collection: 'generations' as never,
@@ -1134,6 +1138,7 @@ export const genImageEndpoint: Endpoint = {
     }
 
     let storedUrl = image.url
+    let thumbUrl = ''
     let fileBytes = 0
     let fileFormat = 'JPEG'
     try {
@@ -1146,6 +1151,11 @@ export const genImageEndpoint: Endpoint = {
         const ext = fileFormat === 'PNG' ? 'png' : fileFormat === 'WEBP' ? 'webp' : 'jpg'
         const name = randomFileName(ext)
         storedUrl = (await persistToR2(bytes, name, contentType)) || image.url
+        try {
+          thumbUrl = (await makeGenThumbFromBuffer(bytes)) || ''
+        } catch {
+          thumbUrl = ''
+        }
       }
     } catch {
       storedUrl = image.url
@@ -1183,6 +1193,7 @@ export const genImageEndpoint: Endpoint = {
         imageSize: resolution ? aspect + ' · ' + resolution : aspect,
         seed: usedSeed,
         url: storedUrl,
+        thumbUrl: thumbUrl || undefined,
         width: image.width,
         height: image.height,
         format: fileFormat,
@@ -1196,6 +1207,7 @@ export const genImageEndpoint: Endpoint = {
     return Response.json({
       id: doc.id,
       url: storedUrl,
+      thumbUrl: thumbUrl || undefined,
       seed: usedSeed,
       prompt,
       model: model.label,
