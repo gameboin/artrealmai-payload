@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 type Option = { id: string; name: string }
 
@@ -60,7 +61,9 @@ export default function InlineRelationshipCell(props: Props) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [open, setOpen] = useState(false)
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 180, maxHeight: 256 })
   const wrapRef = useRef<HTMLDivElement | null>(null)
+  const toggleRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     if (!relationTo) return
@@ -73,10 +76,37 @@ export default function InlineRelationshipCell(props: Props) {
     setValue(idsFromCell(cellData))
   }, [cellData])
 
+  useLayoutEffect(() => {
+    if (!open || !toggleRef.current) return
+    const place = () => {
+      const r = toggleRef.current!.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - r.bottom
+      const spaceAbove = r.top
+      const openUp = spaceBelow < 180 && spaceAbove > spaceBelow
+      const maxHeight = Math.max(120, Math.min(256, (openUp ? spaceAbove : spaceBelow) - 12))
+      setMenuPos({
+        top: openUp ? r.top - maxHeight - 4 : r.bottom + 4,
+        left: Math.min(r.left, window.innerWidth - 220),
+        width: Math.max(r.width, 180),
+        maxHeight,
+      })
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const onDoc = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (wrapRef.current?.contains(target)) return
+      if ((target as HTMLElement).closest?.('.inline-rel-tags__menu')) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
@@ -148,6 +178,7 @@ export default function InlineRelationshipCell(props: Props) {
   return (
     <div className="inline-rel" ref={wrapRef} onMouseDown={stop} onClick={stop} onPointerDown={stop}>
       <button
+        ref={toggleRef}
         type="button"
         className="inline-rel-tags__toggle"
         disabled={saving}
@@ -155,27 +186,40 @@ export default function InlineRelationshipCell(props: Props) {
       >
         {selected.length ? selected.map((opt) => opt.name).join(', ') : 'Set tags'}
       </button>
-      {open ? (
-        <div className="inline-rel-tags__menu">
-          {options.length === 0 ? <div className="inline-rel-error">Loading tags…</div> : null}
-          {options.map((opt) => {
-            const checked = value.includes(opt.id)
-            return (
-              <label key={opt.id} className="inline-rel-tags__option">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => {
-                    const next = checked ? value.filter((id) => id !== opt.id) : [...value, opt.id]
-                    void save(next)
-                  }}
-                />
-                {opt.name}
-              </label>
-            )
-          })}
-        </div>
-      ) : null}
+      {open
+        ? createPortal(
+            <div
+              className="inline-rel-tags__menu"
+              style={{
+                top: menuPos.top,
+                left: menuPos.left,
+                width: menuPos.width,
+                maxHeight: menuPos.maxHeight,
+              }}
+              onMouseDown={stop}
+              onClick={stop}
+            >
+              {options.length === 0 ? <div className="inline-rel-error">Loading tags…</div> : null}
+              {options.map((opt) => {
+                const checked = value.includes(opt.id)
+                return (
+                  <label key={opt.id} className="inline-rel-tags__option">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        const next = checked ? value.filter((id) => id !== opt.id) : [...value, opt.id]
+                        void save(next)
+                      }}
+                    />
+                    {opt.name}
+                  </label>
+                )
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
       {error ? <div className="inline-rel-error">{error}</div> : null}
     </div>
   )
