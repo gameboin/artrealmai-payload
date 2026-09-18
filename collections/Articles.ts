@@ -9,7 +9,7 @@ export const Articles: CollectionConfig = {
   slug: 'articles',
   admin: {
     useAsTitle: 'title',
-    defaultColumns: ['title', 'author', 'publishedDate', 'status'],
+    defaultColumns: ['title', 'author', 'tags', 'publishedDate'],
     preview: (doc) =>
       typeof doc?.slug === 'string' && doc.slug
         ? `https://artrealmai.com/article/${doc.slug}`
@@ -23,8 +23,36 @@ export const Articles: CollectionConfig = {
   },
   fields: [
     { name: 'title', type: 'text', required: true },
-    { name: 'author', type: 'relationship', relationTo: 'authors', admin: { position: 'sidebar' } },
-    { name: 'tags', type: 'relationship', relationTo: 'tags', hasMany: true, admin: { position: 'sidebar' } },
+    {
+      name: 'author',
+      type: 'relationship',
+      relationTo: 'authors',
+      admin: {
+        position: 'sidebar',
+        components: { Cell: '/src/admin/InlineRelationshipCell.tsx' },
+      },
+    },
+    {
+      name: 'tags',
+      type: 'relationship',
+      relationTo: 'tags',
+      hasMany: true,
+      admin: {
+        position: 'sidebar',
+        components: { Cell: '/src/admin/InlineRelationshipCell.tsx' },
+      },
+    },
+    {
+      name: 'slug',
+      type: 'text',
+      unique: true,
+      required: true,
+      index: true,
+      admin: {
+        position: 'sidebar',
+        description: 'Public URL: artrealmai.com/article/this-slug. Auto-filled from the title if left blank.',
+      },
+    },
     {
       name: 'markdownImport',
       type: 'textarea',
@@ -51,17 +79,6 @@ export const Articles: CollectionConfig = {
       admin: {
         position: 'sidebar',
         description: 'WARNING: This overwrites existing content!',
-      },
-    },
-    {
-      name: 'slug',
-      type: 'text',
-      unique: true,
-      required: true,
-      index: true,
-      admin: {
-        position: 'sidebar',
-        description: 'Public URL: artrealmai.com/article/this-slug. Auto-filled from the title if left blank.',
       },
     },
     { name: 'excerpt', type: 'textarea', admin: { description: 'Short teaser for homepage and the default SEO description' } },
