@@ -13,6 +13,7 @@ import { s3Storage } from '@payloadcms/storage-s3'
 
 import { collections } from './collections' 
 import { GlossaryImporter } from './globals/GlossaryImporter'
+import { Homepage } from './globals/Homepage'
 import { CodeBlock } from './blocks/CodeBlock'
 import { DownloadBlock } from './blocks/DownloadBlock'
 import { googleAuthEndpoints } from './endpoints/googleAuth'
@@ -72,6 +73,7 @@ export default buildConfig({
   endpoints: [...googleAuthEndpoints, fileDownloadEndpoint, ...generateImageEndpoints, ...generateVideoEndpoints, ...stripeWalletEndpoints, ...logoLayerEndpoints, ...profileEndpoints, ...regenerateCardSizesEndpoints], 
 
   globals: [
+    Homepage,
     GlossaryImporter,
   ],
 

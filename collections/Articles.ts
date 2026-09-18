@@ -9,7 +9,7 @@ export const Articles: CollectionConfig = {
   slug: 'articles',
   admin: {
     useAsTitle: 'title',
-    defaultColumns: ['title', 'author', 'tags', 'publishedDate'],
+    defaultColumns: ['title', 'author', 'tags', 'spotlight', 'advertisement', 'publishedDate'],
     preview: (doc) =>
       typeof doc?.slug === 'string' && doc.slug
         ? `https://artrealmai.com/article/${doc.slug}`
@@ -108,13 +108,60 @@ export const Articles: CollectionConfig = {
       defaultValue: () => new Date(),
       admin: { position: 'sidebar', date: { pickerAppearance: 'dayAndTime' } },
     },
+    {
+      name: 'spotlight',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        position: 'sidebar',
+        description: 'Show in homepage Spotlight. Max 2; marking a third unchecks the oldest.',
+      },
+    },
+    {
+      name: 'advertisement',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        position: 'sidebar',
+        description: 'Show in homepage Advertisement. Max 2; marking a third unchecks the oldest.',
+      },
+    },
   ],
   hooks: {
     beforeValidate: [
       ({ data }) => applySlug(data),
     ],
     beforeChange: [
-      async ({ data, req }) => {
+      async ({ data, originalDoc, req, context }) => {
+        if (!context?.skipPlacementCap && data) {
+          if (data.spotlight && data.advertisement) data.advertisement = false
+          for (const flag of ['spotlight', 'advertisement'] as const) {
+            if (!data[flag]) continue
+            const id = originalDoc?.id
+            const others = await req.payload.find({
+              collection: 'articles',
+              where: {
+                and: [
+                  { [flag]: { equals: true } },
+                  ...(id ? [{ id: { not_equals: id } }] : []),
+                ],
+              },
+              sort: 'publishedDate',
+              limit: 20,
+              overrideAccess: true,
+            })
+            const extra = others.docs.length - 1
+            for (let i = 0; i < extra; i++) {
+              await req.payload.update({
+                collection: 'articles',
+                id: others.docs[i].id,
+                data: { [flag]: false },
+                overrideAccess: true,
+                context: { skipPlacementCap: true },
+              })
+            }
+          }
+        }
         if (data.markdownImport && data.doImport) {
           console.log('🚀 STARTING MARKDOWN IMPORT...');
 
