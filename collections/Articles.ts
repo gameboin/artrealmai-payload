@@ -23,6 +23,8 @@ export const Articles: CollectionConfig = {
   },
   fields: [
     { name: 'title', type: 'text', required: true },
+    { name: 'author', type: 'relationship', relationTo: 'authors', admin: { position: 'sidebar' } },
+    { name: 'tags', type: 'relationship', relationTo: 'tags', hasMany: true, admin: { position: 'sidebar' } },
     {
       name: 'markdownImport',
       type: 'textarea',
@@ -81,8 +83,6 @@ export const Articles: CollectionConfig = {
     },
     { name: 'content', type: 'richText', required: true },
     { name: 'featuredImage', type: 'upload', relationTo: 'media', required: true },
-    { name: 'author', type: 'relationship', relationTo: 'authors', admin: { position: 'sidebar' } },
-    { name: 'tags', type: 'relationship', relationTo: 'tags', hasMany: true, admin: { position: 'sidebar' } },
     {
       name: 'publishedDate',
       type: 'date',

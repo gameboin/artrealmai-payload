@@ -8,3 +8,9 @@ html[data-theme='light'],
 html[data-theme='dark'] {
   background-color: rgb(20, 20, 20);
 }
+
+.react-select .rs__menu {
+  z-index: 10000;
+  max-height: min(20rem, calc(100vh - 8rem));
+  overflow-y: auto;
+}

@@ -55,6 +55,9 @@ export default buildConfig({
     user: 'users',
     theme: 'dark',
     importMap: { baseDir: path.resolve(dirname) },
+    components: {
+      providers: ['/src/admin/KeepSelectMenusVisible.tsx'],
+    },
   },
 
   graphQL: {
