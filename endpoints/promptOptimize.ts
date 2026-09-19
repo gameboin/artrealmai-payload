@@ -5,6 +5,7 @@ import { buildOptimizeUserText, isPromptTarget, systemPackFor, type PromptTarget
 import { scanPromptSafety } from '../lib/promptSafety'
 
 const DAILY_LIMIT = 5
+const PAID_CENTS = 1.5
 const MAX_BRIEF = 4000
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024
 const ALLOWED_IMAGE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
@@ -12,6 +13,7 @@ const ALLOWED_IMAGE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/g
 type QuotaUser = {
   promptWriterDay?: string | null
   promptWriterCount?: number | null
+  genBalanceCents?: number | null
 }
 
 function utcDayKey() {
@@ -35,18 +37,31 @@ function usedToday(user: QuotaUser) {
   return Math.max(0, Number(user.promptWriterCount) || 0)
 }
 
-async function bumpUse(req: PayloadRequest, userId: string, user: QuotaUser) {
+function roundCents(n: number) {
+  return Math.round(n * 10) / 10
+}
+
+async function settleEnhance(
+  req: PayloadRequest,
+  userId: string,
+  user: QuotaUser,
+  opts: { charge: boolean; nextBalance?: number },
+) {
   const day = utcDayKey()
   const used = usedToday(user)
+  const data: Record<string, unknown> = {
+    promptWriterDay: day,
+    promptWriterCount: used + 1,
+  }
+  if (opts.charge && typeof opts.nextBalance === 'number') {
+    data.genBalanceCents = opts.nextBalance
+  }
   await req.payload.update({
     collection: 'users',
     id: userId,
     overrideAccess: true,
     context: { systemQuota: true },
-    data: {
-      promptWriterDay: day,
-      promptWriterCount: used + 1,
-    } as never,
+    data: data as never,
   })
 }
 
@@ -99,11 +114,14 @@ export const promptOptimizeStatusEndpoint: Endpoint = {
     const used = usedToday(user)
     const adminComp = await userIsGenAdmin(req)
     const remaining = adminComp ? DAILY_LIMIT : Math.max(0, DAILY_LIMIT - used)
+    const balanceCents = Number(user.genBalanceCents) || 0
     return Response.json({
       enabled: deepseekEnabled(),
       dailyLimit: DAILY_LIMIT,
       used: adminComp ? 0 : used,
       remaining,
+      priceCents: PAID_CENTS,
+      balanceCents,
       adminComp,
       targets: [
         { id: 'imagine-video', label: 'Imagine Video', blurb: 'Grok Imagine video' },
@@ -152,10 +170,20 @@ export const promptOptimizeEndpoint: Endpoint = {
     const user = await loadUser(req, userId)
     const adminComp = await userIsGenAdmin(req)
     const used = usedToday(user)
-    if (!adminComp && used >= DAILY_LIMIT) {
+    const remainingFree = adminComp ? DAILY_LIMIT : Math.max(0, DAILY_LIMIT - used)
+    const useFree = adminComp || remainingFree > 0
+    const balanceCents = Number(user.genBalanceCents) || 0
+    if (!useFree && balanceCents < PAID_CENTS) {
       return Response.json(
-        { message: 'Daily Prompt Craft limit reached. Try again tomorrow.', blockKind: 'limit' },
-        { status: 429 },
+        {
+          message: `5 free enhances used. Extra ones are 1.5¢ from your Gen wallet.`,
+          needsFunds: true,
+          priceCents: PAID_CENTS,
+          balanceCents,
+          remaining: 0,
+          blockKind: 'funds',
+        },
+        { status: 402 },
       )
     }
 
@@ -231,9 +259,24 @@ export const promptOptimizeEndpoint: Endpoint = {
       )
     }
 
-    if (!adminComp) await bumpUse(req, userId, user)
-    const remaining = adminComp ? DAILY_LIMIT : Math.max(0, DAILY_LIMIT - used - 1)
-    return Response.json({ ...validated, remaining, dailyLimit: DAILY_LIMIT })
+    let chargedCents = 0
+    let nextBalance = balanceCents
+    if (!adminComp && !useFree) {
+      chargedCents = PAID_CENTS
+      nextBalance = roundCents(Math.max(0, balanceCents - PAID_CENTS))
+    }
+    if (!adminComp) {
+      await settleEnhance(req, userId, user, { charge: chargedCents > 0, nextBalance })
+    }
+    const remaining = adminComp ? DAILY_LIMIT : Math.max(0, DAILY_LIMIT - used - (useFree ? 1 : 0))
+    return Response.json({
+      ...validated,
+      remaining,
+      dailyLimit: DAILY_LIMIT,
+      priceCents: PAID_CENTS,
+      chargedCents,
+      balanceCents: nextBalance,
+    })
   },
 }
 
