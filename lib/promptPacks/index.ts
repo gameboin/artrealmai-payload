@@ -10,6 +10,7 @@ import { FLUX3_VIDEO_PACK } from './flux-3-video'
 import { IMAGINE_VIDEO_PACK } from './imagine-video'
 import { MINIMAX_H3_PACK } from './minimax-h3'
 import { NL_IMAGE_PACK } from './nl-image'
+import { NOVA_JSON_PACK } from './nova-json'
 import { SEEDANCE_PACK } from './seedance'
 
 export { CORE_PACK } from './core'
@@ -17,6 +18,7 @@ export { FLUX3_VIDEO_PACK } from './flux-3-video'
 export { IMAGINE_VIDEO_PACK } from './imagine-video'
 export { MINIMAX_H3_PACK } from './minimax-h3'
 export { NL_IMAGE_PACK } from './nl-image'
+export { NOVA_JSON_PACK } from './nova-json'
 export { SEEDANCE_PACK } from './seedance'
 
 export const PROMPT_TARGETS = [
@@ -25,8 +27,10 @@ export const PROMPT_TARGETS = [
   'seedance',
   'flux-3-video',
   'imagine-video',
+  'nova-json',
 ] as const
 export type PromptTarget = (typeof PROMPT_TARGETS)[number]
+export const ADMIN_PROMPT_TARGETS = ['nova-json'] as const
 
 const FAMILY: Record<PromptTarget, string> = {
   'imagine-video': IMAGINE_VIDEO_PACK,
@@ -34,6 +38,7 @@ const FAMILY: Record<PromptTarget, string> = {
   'nl-image': NL_IMAGE_PACK,
   seedance: SEEDANCE_PACK,
   'flux-3-video': FLUX3_VIDEO_PACK,
+  'nova-json': NOVA_JSON_PACK,
 }
 
 /** Frozen join between core and family. Changing this byte busts every cache. */
@@ -47,6 +52,8 @@ export const SEEDANCE_MODES = ['t2v', 'i2v', 'fl2v', 'ref2v'] as const
 export type SeedanceMode = (typeof SEEDANCE_MODES)[number]
 export const FLUX3_MODES = ['t2v', 'i2v', 'v2v'] as const
 export type Flux3Mode = (typeof FLUX3_MODES)[number]
+export const NOVA_CAMERAS = ['phone', 'pro_still', 'camcorder'] as const
+export type NovaCamera = (typeof NOVA_CAMERAS)[number]
 export const ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9', '2:1'] as const
 
 export function isPromptTarget(value: unknown): value is PromptTarget {
@@ -67,6 +74,14 @@ export function isSeedanceMode(value: unknown): value is SeedanceMode {
 
 export function isFlux3Mode(value: unknown): value is Flux3Mode {
   return FLUX3_MODES.includes(value as Flux3Mode)
+}
+
+export function isAdminPromptTarget(value: unknown): boolean {
+  return (ADMIN_PROMPT_TARGETS as readonly string[]).includes(String(value || ''))
+}
+
+export function isNovaCamera(value: unknown): value is NovaCamera {
+  return NOVA_CAMERAS.includes(value as NovaCamera)
 }
 
 /** Exact system string to send. CORE first, then one family pack. */
@@ -92,6 +107,7 @@ export function buildOptimizeUserText(
     mode?: string
     durationSec?: number
     aspect?: string
+    camera?: string
     refNotes?: string
     hasImage?: boolean
   },
@@ -137,6 +153,15 @@ export function buildOptimizeUserText(
         : 'Keyframe image(s) attached. One image = start frame. Two = start and end. Prompt is the motion between pins.')
       : 'No keyframes. Text-to-video.')
     return `Mode: ${mode}\nDuration: ${durationSecOf(opts.durationSec, 8, 20)}s\nAspect: ${aspectOf(opts.aspect, '16:9')}\nReference notes: ${refs}\n\nBrief:\n${brief}`
+  }
+
+  if (target === 'nova-json') {
+    const mode = opts.hasImage ? 'i2i' : 't2i'
+    const camera = isNovaCamera(opts.camera) ? opts.camera : 'phone'
+    const refs = refsIn || (opts.hasImage
+      ? 'Reference still attached. Lock identity from the image; adapt pose, wardrobe, and setting from the brief. Never reduce the subject lock.'
+      : 'No reference pictures.')
+    return `Mode: ${mode}\nAspect: ${aspectOf(opts.aspect, '9:16')}\nCamera: ${camera}\nReference notes: ${refs}\n\nBrief:\n${brief}`
   }
 
   const mode = opts.hasImage ? 'i2i' : 't2i'

@@ -1,7 +1,7 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { deepseekChat, deepseekEnabled } from '../lib/deepseek'
-import { buildOptimizeUserText, isPromptTarget, systemPackFor, type PromptTarget } from '../lib/promptPacks'
+import { buildOptimizeUserText, isAdminPromptTarget, isPromptTarget, systemPackFor, type PromptTarget } from '../lib/promptPacks'
 import { scanPromptSafety } from '../lib/promptSafety'
 
 const DAILY_LIMIT = 5
@@ -129,6 +129,7 @@ export const promptOptimizeStatusEndpoint: Endpoint = {
         { id: 'seedance', label: 'Seedance', blurb: 'Seedance / Dreamina video' },
         { id: 'flux-3-video', label: 'Flux 3 Video', blurb: 'FLUX 3 video' },
         { id: 'imagine-video', label: 'Grok Imagine', blurb: 'Grok Imagine video' },
+        ...(adminComp ? [{ id: 'nova-json', label: 'Nova JSON', blurb: 'Admin still JSON' }] : []),
       ],
     })
   },
@@ -156,12 +157,17 @@ export const promptOptimizeEndpoint: Endpoint = {
       mode?: unknown
       durationSec?: unknown
       aspect?: unknown
+      camera?: unknown
       refNotes?: unknown
     }
     if (!isPromptTarget(body.target)) {
       return Response.json({ message: 'Pick a target family.' }, { status: 400 })
     }
     const target = body.target
+    const adminComp = await userIsGenAdmin(req)
+    if (isAdminPromptTarget(target) && !adminComp) {
+      return Response.json({ message: 'That format is not available.' }, { status: 403 })
+    }
     const brief = String(body.brief || '').trim().slice(0, MAX_BRIEF)
     const safety = scanPromptSafety(brief)
     if (!safety.ok) {
@@ -170,7 +176,6 @@ export const promptOptimizeEndpoint: Endpoint = {
     const image = parseImage(body.image)
     const userId = String(req.user.id)
     const user = await loadUser(req, userId)
-    const adminComp = await userIsGenAdmin(req)
     const used = usedToday(user)
     const remainingFree = adminComp ? DAILY_LIMIT : Math.max(0, DAILY_LIMIT - used)
     const useFree = adminComp || remainingFree > 0
@@ -195,6 +200,7 @@ export const promptOptimizeEndpoint: Endpoint = {
       mode: typeof body.mode === 'string' ? body.mode : undefined,
       durationSec: Number(body.durationSec),
       aspect: typeof body.aspect === 'string' ? body.aspect : undefined,
+      camera: typeof body.camera === 'string' ? body.camera : undefined,
       refNotes: typeof body.refNotes === 'string' ? body.refNotes : undefined,
       hasImage: Boolean(image),
     })
