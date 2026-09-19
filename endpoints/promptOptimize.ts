@@ -124,9 +124,11 @@ export const promptOptimizeStatusEndpoint: Endpoint = {
       balanceCents,
       adminComp,
       targets: [
-        { id: 'imagine-video', label: 'Imagine Video', blurb: 'Grok Imagine video' },
+        { id: 'nl-image', label: 'Natural Language', blurb: 'Flux / Krea / SD-class stills' },
         { id: 'minimax-h3', label: 'MiniMax H3', blurb: 'H3 shot and physics' },
-        { id: 'nl-image', label: 'NL Image', blurb: 'Flux / Krea / SD-class stills' },
+        { id: 'seedance', label: 'Seedance', blurb: 'Seedance / Dreamina video' },
+        { id: 'flux-3-video', label: 'Flux 3 Video', blurb: 'FLUX 3 video' },
+        { id: 'imagine-video', label: 'Grok Imagine', blurb: 'Grok Imagine video' },
       ],
     })
   },
