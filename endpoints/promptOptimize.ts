@@ -4,7 +4,7 @@ import { deepseekChat, deepseekEnabled } from '../lib/deepseek'
 import { buildOptimizeUserText, isPromptTarget, systemPackFor, type PromptTarget } from '../lib/promptPacks'
 import { scanPromptSafety } from '../lib/promptSafety'
 
-const DAILY_LIMIT = 10
+const DAILY_LIMIT = 5
 const MAX_BRIEF = 4000
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024
 const ALLOWED_IMAGE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
@@ -154,7 +154,7 @@ export const promptOptimizeEndpoint: Endpoint = {
     const used = usedToday(user)
     if (!adminComp && used >= DAILY_LIMIT) {
       return Response.json(
-        { message: 'Daily Prompt Writer limit reached. Try again tomorrow.', blockKind: 'limit' },
+        { message: 'Daily Prompt Craft limit reached. Try again tomorrow.', blockKind: 'limit' },
         { status: 429 },
       )
     }
