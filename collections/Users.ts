@@ -77,6 +77,8 @@ export const Users: CollectionConfig = {
         delete next.genBalanceCents
         delete next.logoLayerDay
         delete next.logoLayerBatches
+        delete next.promptWriterDay
+        delete next.promptWriterCount
         delete next.enableAPIKey
         delete next.apiKey
         delete next.apiKeyIndex
@@ -107,6 +109,8 @@ export const Users: CollectionConfig = {
           delete row.genRejectCount
           delete row.logoLayerDay
           delete row.logoLayerBatches
+          delete row.promptWriterDay
+          delete row.promptWriterCount
         }
         return row
       },
@@ -212,6 +216,19 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'logoLayerBatches',
+      type: 'number',
+      defaultValue: 0,
+      access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
+      admin: { hidden: true },
+    },
+    {
+      name: 'promptWriterDay',
+      type: 'text',
+      access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
+      admin: { hidden: true },
+    },
+    {
+      name: 'promptWriterCount',
       type: 'number',
       defaultValue: 0,
       access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
