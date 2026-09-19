@@ -1,7 +1,7 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { deepseekChat, deepseekEnabled } from '../lib/deepseek'
-import { isPromptTarget, systemPackFor, type PromptTarget } from '../lib/promptPacks'
+import { buildOptimizeUserText, isPromptTarget, systemPackFor, type PromptTarget } from '../lib/promptPacks'
 import { scanPromptSafety } from '../lib/promptSafety'
 
 const DAILY_LIMIT = 10
@@ -129,7 +129,14 @@ export const promptOptimizeEndpoint: Endpoint = {
     } catch {
       return Response.json({ message: 'Invalid request body.' }, { status: 400 })
     }
-    const body = (req.data || {}) as { target?: unknown; brief?: unknown; image?: unknown }
+    const body = (req.data || {}) as {
+      target?: unknown
+      brief?: unknown
+      image?: unknown
+      mode?: unknown
+      durationSec?: unknown
+      refNotes?: unknown
+    }
     if (!isPromptTarget(body.target)) {
       return Response.json({ message: 'Pick a target family.' }, { status: 400 })
     }
@@ -152,7 +159,13 @@ export const promptOptimizeEndpoint: Endpoint = {
     }
 
     const system = systemPackFor(target)
-    const userText = `Target: ${target}\nBrief:\n${brief}`
+    const userText = buildOptimizeUserText(target, {
+      brief,
+      mode: typeof body.mode === 'string' ? body.mode : undefined,
+      durationSec: Number(body.durationSec),
+      refNotes: typeof body.refNotes === 'string' ? body.refNotes : undefined,
+      hasImage: Boolean(image),
+    })
     const userContent = image
       ? ([
           { type: 'text', text: userText },
