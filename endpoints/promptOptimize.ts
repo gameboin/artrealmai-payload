@@ -135,6 +135,7 @@ export const promptOptimizeEndpoint: Endpoint = {
       image?: unknown
       mode?: unknown
       durationSec?: unknown
+      aspect?: unknown
       refNotes?: unknown
     }
     if (!isPromptTarget(body.target)) {
@@ -163,6 +164,7 @@ export const promptOptimizeEndpoint: Endpoint = {
       brief,
       mode: typeof body.mode === 'string' ? body.mode : undefined,
       durationSec: Number(body.durationSec),
+      aspect: typeof body.aspect === 'string' ? body.aspect : undefined,
       refNotes: typeof body.refNotes === 'string' ? body.refNotes : undefined,
       hasImage: Boolean(image),
     })
