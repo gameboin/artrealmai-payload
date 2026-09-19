@@ -47,8 +47,9 @@ function publicUser(row: UserRow) {
   }
 }
 
-function publicPin(row: GenRow, withUser?: ReturnType<typeof publicUser>) {
+function publicPin(row: GenRow, withUser?: ReturnType<typeof publicUser>, opts?: { includePrompt?: boolean }) {
   const promptPublic = Boolean(row.promptPublic)
+  const showPrompt = promptPublic || Boolean(opts?.includePrompt)
   return {
     id: row.id,
     url: row.url,
@@ -66,9 +67,10 @@ function publicPin(row: GenRow, withUser?: ReturnType<typeof publicUser>) {
     durationSec: row.durationSec,
     durationMs: row.durationMs,
     createdAt: row.createdAt,
+    pinned: Boolean(row.pinned),
     pinnedAt: row.pinnedAt,
     promptPublic,
-    prompt: promptPublic ? row.prompt : undefined,
+    prompt: showPrompt ? row.prompt : undefined,
     user: withUser,
   }
 }
@@ -104,6 +106,7 @@ export const profileGetEndpoint: Endpoint = {
       return Response.json({ message: 'Profile not found.' }, { status: 404 })
     }
 
+    const mine = Boolean(req.user && String(req.user.id) === String(user.id))
     const pins = await req.payload.find({
       collection: 'generations' as never,
       overrideAccess: true,
@@ -120,9 +123,31 @@ export const profileGetEndpoint: Endpoint = {
     })
 
     const profile = publicUser(user)
+    const pinOpts = { includePrompt: mine }
+    let gens: ReturnType<typeof publicPin>[] | undefined
+    if (mine) {
+      const library = await req.payload.find({
+        collection: 'generations' as never,
+        overrideAccess: true,
+        depth: 0,
+        limit: 60,
+        sort: '-createdAt',
+        where: {
+          and: [
+            { user: { equals: String(user.id) } },
+            { format: { not_equals: 'BLOCKED' } },
+          ],
+        },
+      })
+      gens = (library.docs as GenRow[]).map((doc) => publicPin(doc, profile, pinOpts))
+    }
+
     return Response.json({
       ...profile,
-      pins: (pins.docs as GenRow[]).map((doc) => publicPin(doc, profile)),
+      mine,
+      pinCap: PIN_CAP,
+      pins: (pins.docs as GenRow[]).map((doc) => publicPin(doc, profile, pinOpts)),
+      gens,
       adminComp: await userIsGenAdmin(req),
     })
   },
