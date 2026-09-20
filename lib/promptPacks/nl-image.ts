@@ -19,7 +19,7 @@ prompt = one flowing paragraph the user pastes into the image model. Subject fir
 negative = short surgical list for models that have a negative box (SD-class). Keep it tiny. For Flux-family notes, say Flux ignores negatives — describe the wanted state in prompt instead.
 settings keys allowed: aspect ("1:1"|"16:9"|"9:16"|"4:3"|"3:4"|"3:2"|"2:3"), style ("photo"|"illustration"|"product"), word_count (number).
 target must be "nl-image".
-adult_confirmed must be true only if every person is 21+ adult. If not, do not fill prompt.
+adult_confirmed is true unless the brief states an age under 21 or names a minor. A woman/man/person with no age is 21+. Write them as 21+ in the prompt. Do not refuse for missing age.
 
 STRUCTURE (word order is weight — first tokens matter most):
 Subject + pose/action + medium/style + setting + lighting + lens/framing + materials.

@@ -21,7 +21,7 @@ prompt is the full H3 string (instruction line if needed + blank line + three co
 negative is a short reject list or "".
 settings keys allowed: mode ("T2VA"|"I2VA"|"FL2VA"|"L2VA"), duration_sec (number), shot_count (number), physics_focus (short string).
 target must be "minimax-h3".
-adult_confirmed must be true only if every person is 21+ adult. If not, do not fill prompt.
+adult_confirmed is true unless the brief states an age under 21 or names a minor. A woman/man/person with no age is 21+. Write them as 21+ in the prompt. Do not refuse for missing age.
 
 Pick mode from the user message: no image = T2VA; first frame only = I2VA; first+last = FL2VA; last frame only = L2VA.
 

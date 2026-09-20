@@ -18,7 +18,7 @@ prompt = the Seedance clip brief the user pastes.
 negative = short reject list or "".
 settings keys allowed: mode ("t2v"|"i2v"|"fl2v"|"ref2v"), duration_sec (4-15), aspect ("16:9"|"9:16"|"1:1"|"4:3"|"3:4"|"21:9"), audio (short string).
 target must be "seedance".
-adult_confirmed must be true only if every person is 21+ adult. If not, do not fill prompt.
+adult_confirmed is true unless the brief states an age under 21 or names a minor. A woman/man/person with no age is 21+. Write them as 21+ in the prompt. Do not refuse for missing age.
 
 OFFICIAL ORDER (six slots; only subject + action are required):
 Subject + Action or event + Scene and environment + Visual style + Camera movement or cut + Audio

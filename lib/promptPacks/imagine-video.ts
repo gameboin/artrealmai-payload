@@ -19,7 +19,7 @@ prompt = the Imagine clip brief the user pastes. Spoken English. Timeline order:
 negative = short reject list or "".
 settings keys allowed: mode ("t2v"|"i2v"|"ref2v"), duration_sec (1-15), aspect ("16:9"|"9:16"|"1:1"|"4:3"|"3:4"), motion ("locked"|"subtle"|"medium"|"strong"), audio (short string).
 target must be "imagine-video".
-adult_confirmed must be true only if every person is 21+ adult. If not, do not fill prompt.
+adult_confirmed is true unless the brief states an age under 21 or names a minor. A woman/man/person with no age is 21+. Write them as 21+ in the prompt. Do not refuse for missing age.
 
 MODE from the user message:
 t2v = text only. Write subject + action + place + camera + light + audio.

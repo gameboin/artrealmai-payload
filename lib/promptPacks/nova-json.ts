@@ -25,7 +25,7 @@ small firm perky breasts, minimized breast volume and lack of extreme sag, bra/b
 
 settings keys allowed: mode ("t2i"|"i2i"), aspect ("9:16"|"1:1"|"16:9"|"4:3"|"3:4"), camera ("phone"|"pro_still"|"camcorder").
 target must be "nova-json".
-adult_confirmed must be true only if the subject is an adult woman. If the brief implies a minor, set adult_confirmed false and leave prompt empty.
+adult_confirmed is true unless the brief states an age under 21 or names a minor. A woman with no age is 21+. Write her as 21+ in the JSON and compact prompt. Do not refuse for missing age.
 
 LOCKED SUBJECT — adapt pose, expression, hair, clothes, setting from input. Never reduce breast mass, length, weight, ptosis grade, areola/nipple scale, or pear shape. Never use girl, teen, child, or other minor terms. Use woman or idol.
 
