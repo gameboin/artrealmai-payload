@@ -28,11 +28,12 @@ export const PROMPT_TARGETS = [
   'flux-3-video',
   'imagine-video',
   'nova-json',
+  'deepseek-chat',
 ] as const
 export type PromptTarget = (typeof PROMPT_TARGETS)[number]
-export const ADMIN_PROMPT_TARGETS = ['nova-json'] as const
+export const ADMIN_PROMPT_TARGETS = ['nova-json', 'deepseek-chat'] as const
 
-const FAMILY: Record<PromptTarget, string> = {
+const FAMILY: Partial<Record<PromptTarget, string>> = {
   'imagine-video': IMAGINE_VIDEO_PACK,
   'minimax-h3': MINIMAX_H3_PACK,
   'nl-image': NL_IMAGE_PACK,
@@ -84,9 +85,14 @@ export function isNovaCamera(value: unknown): value is NovaCamera {
   return NOVA_CAMERAS.includes(value as NovaCamera)
 }
 
-/** Exact system string to send. CORE first, then one family pack. */
+export function isBareChatTarget(target: PromptTarget) {
+  return target === 'deepseek-chat'
+}
+
+/** Exact system string to send. CORE first, then one family pack. Bare chat sends none. */
 export function systemPackFor(target: PromptTarget) {
-  return CORE_PACK + SYSTEM_JOIN + FAMILY[target]
+  if (target === 'deepseek-chat') return ''
+  return CORE_PACK + SYSTEM_JOIN + (FAMILY[target] || '')
 }
 
 function durationSecOf(value: unknown, fallback = 6, max = 20) {
@@ -114,6 +120,8 @@ export function buildOptimizeUserText(
 ) {
   const brief = String(opts.brief || '').trim()
   const refsIn = String(opts.refNotes || '').trim()
+
+  if (target === 'deepseek-chat') return brief
 
   if (target === 'minimax-h3') {
     const mode = isH3Mode(opts.mode) ? opts.mode : opts.hasImage ? 'I2VA' : 'T2VA'

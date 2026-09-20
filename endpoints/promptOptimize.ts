@@ -1,7 +1,7 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { deepseekChat, deepseekEnabled } from '../lib/deepseek'
-import { buildOptimizeUserText, isAdminPromptTarget, isPromptTarget, systemPackFor, type PromptTarget } from '../lib/promptPacks'
+import { buildOptimizeUserText, isAdminPromptTarget, isBareChatTarget, isPromptTarget, systemPackFor, type PromptTarget } from '../lib/promptPacks'
 import { scanPromptSafety } from '../lib/promptSafety'
 
 const DAILY_LIMIT = 5
@@ -129,7 +129,12 @@ export const promptOptimizeStatusEndpoint: Endpoint = {
         { id: 'seedance', label: 'Seedance', blurb: 'Seedance / Dreamina video' },
         { id: 'flux-3-video', label: 'Flux 3 Video', blurb: 'FLUX 3 video' },
         { id: 'imagine-video', label: 'Grok Imagine', blurb: 'Grok Imagine video' },
-        ...(adminComp ? [{ id: 'nova-json', label: 'Nova JSON', blurb: 'Admin still JSON' }] : []),
+        ...(adminComp
+          ? [
+              { id: 'nova-json', label: 'Nova JSON', blurb: 'Admin still JSON' },
+              { id: 'deepseek-chat', label: 'DeepSeek Chat', blurb: 'Admin default chat' },
+            ]
+          : []),
       ],
     })
   },
@@ -194,6 +199,7 @@ export const promptOptimizeEndpoint: Endpoint = {
       )
     }
 
+    const bareChat = isBareChatTarget(target)
     const system = systemPackFor(target)
     const userText = buildOptimizeUserText(target, {
       brief,
@@ -212,10 +218,13 @@ export const promptOptimizeEndpoint: Endpoint = {
       : userText
 
     async function once() {
-      return deepseekChat([
-        { role: 'system', content: system },
-        { role: 'user', content: userContent as never },
-      ])
+      const messages = []
+      if (!bareChat && system) messages.push({ role: 'system' as const, content: system })
+      messages.push({ role: 'user' as const, content: userContent as never })
+      return deepseekChat(messages, bareChat ? 8192 : 2048, {
+        json: !bareChat,
+        thinking: bareChat ? true : false,
+      })
     }
 
     let result
@@ -231,6 +240,18 @@ export const promptOptimizeEndpoint: Endpoint = {
     }
 
     const parse = (content: string) => {
+      if (bareChat) {
+        const prompt = String(content || '').trim()
+        if (!prompt) return null
+        return {
+          target,
+          adult_confirmed: true as const,
+          prompt,
+          negative: '',
+          settings: {},
+          notes: '',
+        }
+      }
       try {
         return validateOutput(JSON.parse(stripJsonFence(content)), target)
       } catch {

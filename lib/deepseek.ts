@@ -29,25 +29,32 @@ export function deepseekEnabled() {
   return Boolean(deepseekConfig().apiKey)
 }
 
-export async function deepseekChat(messages: DeepSeekMessage[], maxTokens = 2048): Promise<DeepSeekResult> {
+export async function deepseekChat(
+  messages: DeepSeekMessage[],
+  maxTokens = 2048,
+  opts?: { json?: boolean; thinking?: boolean },
+): Promise<DeepSeekResult> {
   const { apiKey, baseUrl } = deepseekConfig()
   if (!apiKey) {
     throw new Error('DEEPSEEK_UNWIRED')
   }
+  const wantJson = opts?.json !== false
+  const thinkingOff = opts?.thinking === false || (opts?.thinking == null && wantJson)
+  const body: Record<string, unknown> = {
+    model: DEEPSEEK_MODEL,
+    messages,
+    max_tokens: maxTokens,
+    temperature: 0.7,
+  }
+  if (thinkingOff) body.thinking = { type: 'disabled' }
+  if (wantJson) body.response_format = { type: 'json_object' }
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: DEEPSEEK_MODEL,
-      messages,
-      thinking: { type: 'disabled' },
-      response_format: { type: 'json_object' },
-      max_tokens: maxTokens,
-      temperature: 0.7,
-    }),
+    body: JSON.stringify(body),
   })
   const json = (await res.json().catch(() => null)) as {
     error?: { message?: string }
