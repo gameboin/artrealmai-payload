@@ -55,6 +55,18 @@ export const FLUX3_MODES = ['t2v', 'i2v', 'v2v'] as const
 export type Flux3Mode = (typeof FLUX3_MODES)[number]
 export const NOVA_CAMERAS = ['phone', 'pro_still', 'camcorder'] as const
 export type NovaCamera = (typeof NOVA_CAMERAS)[number]
+export const NL_IMAGE_MODELS = [
+  { id: 'auto', label: 'Any' },
+  { id: 'flux', label: 'Flux' },
+  { id: 'flux-2', label: 'FLUX.2' },
+  { id: 'krea', label: 'Krea' },
+  { id: 'qwen-image', label: 'Qwen-Image' },
+  { id: 'chatgpt-image', label: 'ChatGPT Image Gen' },
+  { id: 'nano-banana', label: 'Nano Banana' },
+  { id: 'midjourney', label: 'Midjourney' },
+  { id: 'stable-diffusion', label: 'Stable Diffusion' },
+] as const
+export type NlImageModel = (typeof NL_IMAGE_MODELS)[number]['id']
 export const ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9', '2:1'] as const
 
 export function isPromptTarget(value: unknown): value is PromptTarget {
@@ -83,6 +95,14 @@ export function isAdminPromptTarget(value: unknown): boolean {
 
 export function isNovaCamera(value: unknown): value is NovaCamera {
   return NOVA_CAMERAS.includes(value as NovaCamera)
+}
+
+export function isNlImageModel(value: unknown): value is NlImageModel {
+  return NL_IMAGE_MODELS.some((row) => row.id === value)
+}
+
+function nlImageModelLabel(id: string) {
+  return NL_IMAGE_MODELS.find((row) => row.id === id)?.label || 'Any'
 }
 
 export function isBareChatTarget(target: PromptTarget) {
@@ -114,6 +134,7 @@ export function buildOptimizeUserText(
     durationSec?: number
     aspect?: string
     camera?: string
+    imageModel?: string
     refNotes?: string
     hasImage?: boolean
   },
@@ -161,6 +182,18 @@ export function buildOptimizeUserText(
         : 'Keyframe image(s) attached. One image = start frame. Two = start and end. Prompt is the motion between pins.')
       : 'No keyframes. Text-to-video.')
     return `Mode: ${mode}\nDuration: ${durationSecOf(opts.durationSec, 8, 20)}s\nAspect: ${aspectOf(opts.aspect, '16:9')}\nReference notes: ${refs}\n\nBrief:\n${brief}`
+  }
+
+  if (target === 'nl-image') {
+    const imageModel = isNlImageModel(opts.imageModel) ? opts.imageModel : 'auto'
+    const modelLine = imageModel === 'auto'
+      ? 'Image model: auto (model-agnostic natural language)'
+      : `Image model: ${nlImageModelLabel(imageModel)}. Adapt the prompt field to that model.`
+    const mode = opts.hasImage ? 'i2i' : 't2i'
+    const refs = refsIn || (opts.hasImage
+      ? 'Reference image attached. Lock identity from the image; do not caption-dump the still.'
+      : 'No reference pictures.')
+    return `Mode: ${mode}\nAspect: ${aspectOf(opts.aspect, '1:1')}\n${modelLine}\nReference notes: ${refs}\n\nBrief:\n${brief}`
   }
 
   if (target === 'nova-json') {

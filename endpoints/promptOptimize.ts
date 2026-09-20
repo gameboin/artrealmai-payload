@@ -163,6 +163,7 @@ export const promptOptimizeEndpoint: Endpoint = {
       durationSec?: unknown
       aspect?: unknown
       camera?: unknown
+      imageModel?: unknown
       refNotes?: unknown
     }
     if (!isPromptTarget(body.target)) {
@@ -207,6 +208,7 @@ export const promptOptimizeEndpoint: Endpoint = {
       durationSec: Number(body.durationSec),
       aspect: typeof body.aspect === 'string' ? body.aspect : undefined,
       camera: typeof body.camera === 'string' ? body.camera : undefined,
+      imageModel: typeof body.imageModel === 'string' ? body.imageModel : undefined,
       refNotes: typeof body.refNotes === 'string' ? body.refNotes : undefined,
       hasImage: Boolean(image),
     })
