@@ -6,6 +6,7 @@ export const Users: CollectionConfig = {
   slug: 'users',
   auth: {
     useAPIKey: true,
+    tokenExpiration: 60 * 60 * 24 * 14,
     maxLoginAttempts: 5,
     lockTime: 10 * 60 * 1000,
     cookies: {
