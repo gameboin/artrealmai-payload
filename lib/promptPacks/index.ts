@@ -57,14 +57,11 @@ export const NOVA_CAMERAS = ['phone', 'pro_still', 'camcorder'] as const
 export type NovaCamera = (typeof NOVA_CAMERAS)[number]
 export const NL_IMAGE_MODELS = [
   { id: 'auto', label: 'Any' },
-  { id: 'flux', label: 'Flux' },
-  { id: 'flux-2', label: 'FLUX.2' },
+  { id: 'flux', label: 'FLUX' },
   { id: 'krea', label: 'Krea' },
   { id: 'qwen-image', label: 'Qwen-Image' },
-  { id: 'chatgpt-image', label: 'ChatGPT Image Gen' },
+  { id: 'chatgpt-image', label: 'ChatGPT Image' },
   { id: 'nano-banana', label: 'Nano Banana' },
-  { id: 'midjourney', label: 'Midjourney' },
-  { id: 'stable-diffusion', label: 'Stable Diffusion' },
 ] as const
 export type NlImageModel = (typeof NL_IMAGE_MODELS)[number]['id']
 export const ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9', '2:1'] as const
