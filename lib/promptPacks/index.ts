@@ -10,6 +10,7 @@ import { FLUX3_VIDEO_PACK } from './flux-3-video'
 import { IMAGINE_VIDEO_PACK } from './imagine-video'
 import { MINIMAX_H3_PACK } from './minimax-h3'
 import { NL_IMAGE_PACK } from './nl-image'
+import { NOVA_DYNAMIC_LIGHT_PACK } from './nova-dynamic-light'
 import { NOVA_JSON_PACK } from './nova-json'
 import { SEEDANCE_PACK } from './seedance'
 
@@ -18,6 +19,7 @@ export { FLUX3_VIDEO_PACK } from './flux-3-video'
 export { IMAGINE_VIDEO_PACK } from './imagine-video'
 export { MINIMAX_H3_PACK } from './minimax-h3'
 export { NL_IMAGE_PACK } from './nl-image'
+export { NOVA_DYNAMIC_LIGHT_PACK } from './nova-dynamic-light'
 export { NOVA_JSON_PACK } from './nova-json'
 export { SEEDANCE_PACK } from './seedance'
 
@@ -28,10 +30,11 @@ export const PROMPT_TARGETS = [
   'flux-3-video',
   'imagine-video',
   'nova-json',
+  'nova-dynamic-light',
   'deepseek-chat',
 ] as const
 export type PromptTarget = (typeof PROMPT_TARGETS)[number]
-export const ADMIN_PROMPT_TARGETS = ['nova-json', 'deepseek-chat'] as const
+export const ADMIN_PROMPT_TARGETS = ['nova-json', 'nova-dynamic-light', 'deepseek-chat'] as const
 
 const FAMILY: Partial<Record<PromptTarget, string>> = {
   'imagine-video': IMAGINE_VIDEO_PACK,
@@ -40,6 +43,7 @@ const FAMILY: Partial<Record<PromptTarget, string>> = {
   seedance: SEEDANCE_PACK,
   'flux-3-video': FLUX3_VIDEO_PACK,
   'nova-json': NOVA_JSON_PACK,
+  'nova-dynamic-light': NOVA_DYNAMIC_LIGHT_PACK,
 }
 
 /** Frozen join between core and family. Changing this byte busts every cache. */
@@ -218,7 +222,7 @@ export function buildOptimizeUserText(
     return `Mode: ${mode}\nAspect: ${aspectOf(opts.aspect, '1:1')}\n${modelLine}\nReference notes: ${refs}\n\nBrief:\n${brief}`
   }
 
-  if (target === 'nova-json') {
+  if (target === 'nova-json' || target === 'nova-dynamic-light') {
     const mode = opts.hasImage ? 'i2i' : 't2i'
     const camera = isNovaCamera(opts.camera) ? opts.camera : 'phone'
     const refs = refsIn || (opts.hasImage

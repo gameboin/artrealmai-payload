@@ -149,6 +149,7 @@ export const promptOptimizeStatusEndpoint: Endpoint = {
         ...(adminComp
           ? [
               { id: 'nova-json', label: 'Nova JSON', blurb: 'Admin still JSON' },
+              { id: 'nova-dynamic-light', label: 'Nova Dynamic Light', blurb: 'Admin still JSON, dynamic tree' },
               { id: 'deepseek-chat', label: 'DeepSeek Chat', blurb: 'Admin default chat' },
             ]
           : []),
