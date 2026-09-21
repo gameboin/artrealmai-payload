@@ -45,7 +45,7 @@ const FAMILY: Partial<Record<PromptTarget, string>> = {
 /** Frozen join between core and family. Changing this byte busts every cache. */
 const SYSTEM_JOIN = '\n\n'
 
-export const H3_MODES = ['T2VA', 'I2VA', 'FL2VA', 'L2VA'] as const
+export const H3_MODES = ['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA'] as const
 export type H3Mode = (typeof H3_MODES)[number]
 export const IMAGINE_MODES = ['t2v', 'i2v', 'ref2v'] as const
 export type ImagineMode = (typeof IMAGINE_MODES)[number]
@@ -65,6 +65,20 @@ export const NL_IMAGE_MODELS = [
 ] as const
 export type NlImageModel = (typeof NL_IMAGE_MODELS)[number]['id']
 export const ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9', '2:1'] as const
+export const MAX_REF_IMAGES = 3
+
+export function refToken(target: PromptTarget, index: number) {
+  const n = index + 1
+  if (target === 'minimax-h3') return `<Picture ${n}>`
+  return `@Image ${n}`
+}
+
+export function isMultiRefMode(target: PromptTarget, mode?: string) {
+  if (target === 'minimax-h3') return mode === 'REF2VA' || mode === 'FL2VA'
+  if (target === 'imagine-video') return mode === 'ref2v'
+  if (target === 'seedance') return mode === 'ref2v' || mode === 'fl2v'
+  return false
+}
 
 export function isPromptTarget(value: unknown): value is PromptTarget {
   return PROMPT_TARGETS.includes(value as PromptTarget)
@@ -134,39 +148,50 @@ export function buildOptimizeUserText(
     imageModel?: string
     refNotes?: string
     hasImage?: boolean
+    imageCount?: number
   },
 ) {
   const brief = String(opts.brief || '').trim()
   const refsIn = String(opts.refNotes || '').trim()
+  const imageCount = Math.max(0, Math.min(MAX_REF_IMAGES, Number(opts.imageCount) || (opts.hasImage ? 1 : 0)))
+  const refMap = imageCount
+    ? Array.from({ length: imageCount }, (_, i) => `${refToken(target, i)} = attached image ${i + 1}`).join('\n')
+    : ''
 
   if (target === 'deepseek-chat') return brief
 
   if (target === 'minimax-h3') {
     const mode = isH3Mode(opts.mode) ? opts.mode : opts.hasImage ? 'I2VA' : 'T2VA'
-    const refs = refsIn || (opts.hasImage
-      ? (mode === 'L2VA'
-        ? 'Picture 1 is the last frame (image attached).'
-        : mode === 'FL2VA'
-          ? 'Picture 1 is the first frame (image attached). Picture 2 / last frame is described in the brief.'
-          : 'Picture 1 is the first frame (image attached).')
+    const refs = refsIn || (refMap
+      ? (mode === 'REF2VA'
+        ? `Identity/style refs (not first-frame unless the brief says so).\n${refMap}\nKeep these tokens in the output on the matching people/objects.`
+        : mode === 'L2VA'
+          ? `${refToken(target, 0)} is the last frame.\n${refMap}`
+          : mode === 'FL2VA'
+            ? `${refToken(target, 0)} is the first frame. ${imageCount > 1 ? `${refToken(target, 1)} is the last frame.` : 'Last frame is in the brief.'}\n${refMap}`
+            : `${refToken(target, 0)} is the first frame.\n${refMap}`)
       : 'No reference pictures.')
     return `Mode: ${mode}\nDuration: ${durationSecOf(opts.durationSec, 6, 15)}s\nReference notes: ${refs}\n\nBrief:\n${brief}`
   }
 
   if (target === 'imagine-video') {
     const mode = isImagineMode(opts.mode) ? opts.mode : opts.hasImage ? 'i2v' : 't2v'
-    const refs = refsIn || (opts.hasImage
-      ? 'First-frame image attached. Do not re-describe the still. Motion and sound only.'
+    const refs = refsIn || (refMap
+      ? (mode === 'ref2v'
+        ? `Style/character refs. Keep @Image N tokens in the output.\n${refMap}`
+        : `First-frame image attached. Do not re-describe the still. Motion and sound only.\n${refMap}`)
       : 'No reference pictures.')
     return `Mode: ${mode}\nDuration: ${durationSecOf(opts.durationSec, 6, 15)}s\nAspect: ${aspectOf(opts.aspect, '16:9')}\nReference notes: ${refs}\n\nBrief:\n${brief}`
   }
 
   if (target === 'seedance') {
     const mode = isSeedanceMode(opts.mode) ? opts.mode : opts.hasImage ? 'i2v' : 't2v'
-    const refs = refsIn || (opts.hasImage
-      ? (mode === 'fl2v'
-        ? '@Image 1 is the first frame. @Image 2 is the last frame if attached; otherwise last frame is in the brief.'
-        : '@Image 1 is attached. Give it an explicit job (first frame, identity, location, or product).')
+    const refs = refsIn || (refMap
+      ? (mode === 'ref2v'
+        ? `Identity/style refs. Keep @Image N tokens in the output.\n${refMap}`
+        : mode === 'fl2v'
+          ? `@Image 1 first frame. ${imageCount > 1 ? '@Image 2 last frame.' : 'Last frame in the brief.'}\n${refMap}`
+          : `@Image 1 as first frame.\n${refMap}`)
       : 'No reference files.')
     return `Mode: ${mode}\nDuration: ${durationSecOf(opts.durationSec, 8, 15)}s\nAspect: ${aspectOf(opts.aspect, '16:9')}\nReference notes: ${refs}\n\nBrief:\n${brief}`
   }

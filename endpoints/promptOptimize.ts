@@ -7,7 +7,8 @@ import { scanPromptSafety } from '../lib/promptSafety'
 const DAILY_LIMIT = 5
 const PAID_CENTS = 1.5
 const MAX_BRIEF = 4000
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024
+const MAX_IMAGE_BYTES = 1.2 * 1024 * 1024
+const MAX_IMAGES = 3
 const ALLOWED_IMAGE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 
 type QuotaUser = {
@@ -74,6 +75,22 @@ function parseImage(raw: unknown): { mime: string; dataUrl: string } | null {
   const buf = Buffer.from(data, 'base64')
   if (!buf.length || buf.length > MAX_IMAGE_BYTES) return null
   return { mime, dataUrl: `data:${mime};base64,${data}` }
+}
+
+function parseImages(body: { image?: unknown; images?: unknown }) {
+  const list: { mime: string; dataUrl: string }[] = []
+  if (Array.isArray(body.images)) {
+    for (const row of body.images) {
+      const parsed = parseImage(row)
+      if (parsed) list.push(parsed)
+      if (list.length >= MAX_IMAGES) break
+    }
+  }
+  if (!list.length) {
+    const one = parseImage(body.image)
+    if (one) list.push(one)
+  }
+  return list
 }
 
 function stripJsonFence(text: string) {
@@ -159,6 +176,7 @@ export const promptOptimizeEndpoint: Endpoint = {
       target?: unknown
       brief?: unknown
       image?: unknown
+      images?: unknown
       mode?: unknown
       durationSec?: unknown
       aspect?: unknown
@@ -179,7 +197,7 @@ export const promptOptimizeEndpoint: Endpoint = {
     if (!safety.ok) {
       return Response.json({ message: safety.message, blockKind: 'safety' }, { status: 422 })
     }
-    const image = parseImage(body.image)
+    const images = parseImages(body)
     const userId = String(req.user.id)
     const user = await loadUser(req, userId)
     const used = usedToday(user)
@@ -210,12 +228,13 @@ export const promptOptimizeEndpoint: Endpoint = {
       camera: typeof body.camera === 'string' ? body.camera : undefined,
       imageModel: typeof body.imageModel === 'string' ? body.imageModel : undefined,
       refNotes: typeof body.refNotes === 'string' ? body.refNotes : undefined,
-      hasImage: Boolean(image),
+      hasImage: images.length > 0,
+      imageCount: images.length,
     })
-    const userContent = image
+    const userContent = images.length
       ? ([
           { type: 'text', text: userText },
-          { type: 'image_url', image_url: { url: image.dataUrl } },
+          ...images.map((img) => ({ type: 'image_url' as const, image_url: { url: img.dataUrl } })),
         ] as const)
       : userText
 

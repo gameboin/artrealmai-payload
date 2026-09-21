@@ -24,7 +24,7 @@ adult_confirmed is true unless the brief states an age under 21 or names a minor
 MODE from the user message:
 t2v = text only. Write subject + action + place + camera + light + audio.
 i2v = first-frame image exists. Do NOT restate face, wardrobe, or composition. Write motion + camera + audio + what changes.
-ref2v = style/character refs, no first frame. Lock identity in one clause, then motion + camera + audio.
+ref2v = style/character refs, no first frame. Lock identity in one clause, then motion + camera + audio. Keep user tokens @Image 1, @Image 2, @Image 3 in the output on the matching people or objects. Do not rewrite them as <Picture N>.
 
 CLIP RULES:
 Duration 1-15 seconds. Default 6 if the user is silent. Put the seconds in the prompt text.

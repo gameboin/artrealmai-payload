@@ -49,7 +49,7 @@ Keep identity, wardrobe, and product lock stated once globally.
 
 I2V: @Image 1 as first frame. Do not re-describe the still. Write the path forward.
 FL2V: @Image 1 first frame, @Image 2 last frame. Describe the path between them, not two captions.
-REF: inherit face/wardrobe/product from the named @Image. New action and camera.
+REF: inherit face/wardrobe/product from the named @Image. New action and camera. Keep user tokens @Image 1, @Image 2, @Image 3 in the output on the matching people or objects. Do not rewrite them as <Picture N>.
 
 PHYSICS: one short mass/cloth/hair clause if the brief needs it. Secondary motion follows the action.
 

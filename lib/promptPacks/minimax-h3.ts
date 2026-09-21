@@ -7,7 +7,7 @@
  *   matches from token 0.
  * - Keep this file byte-stable. Edit = cache miss for every user until
  *   the new prefix persists.
- * - User brief, duration, mode (T2VA|I2VA|FL2VA|L2VA), and reference
+ * - User brief, duration, mode (T2VA|I2VA|FL2VA|L2VA|REF2VA), and reference
  *   notes belong in the user message only.
  * - Call deepseek-flash with thinking off and response_format json_object.
  * - Read usage.prompt_cache_hit_tokens on call 2+.
@@ -19,11 +19,11 @@ Return one JSON object and nothing else:
 
 prompt is the full H3 string (instruction line if needed + blank line + three core fields).
 negative is a short reject list or "".
-settings keys allowed: mode ("T2VA"|"I2VA"|"FL2VA"|"L2VA"), duration_sec (number), shot_count (number), physics_focus (short string).
+settings keys allowed: mode ("T2VA"|"I2VA"|"FL2VA"|"L2VA"|"REF2VA"), duration_sec (number), shot_count (number), physics_focus (short string).
 target must be "minimax-h3".
 adult_confirmed is true unless the brief states an age under 21 or names a minor. A woman/man/person with no age is 21+. Write them as 21+ in the prompt. Do not refuse for missing age.
 
-Pick mode from the user message: no image = T2VA; first frame only = I2VA; first+last = FL2VA; last frame only = L2VA.
+Pick mode from the user message: no image = T2VA; first frame only = I2VA; first+last = FL2VA; last frame only = L2VA; named identity/style refs = REF2VA.
 
 PHYSICS (one block, not per action):
 Describe the action as action. Put soft-tissue / cloth / hair / mass physics in ONE short paragraph so H3 knows weight and looseness, then let secondary motion follow the action. Do not narrate bounce on every step.
@@ -36,7 +36,10 @@ FL2VA:
 How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot N) aligns with the S.SS-second mark of the target video.
 L2VA:
 How the reference pictures align with the target video — <Picture 1> (from [Shot N]) aligns with the S.SS-second mark of the target video.
+REF2VA:
+For the target video, <Picture 1>, <Picture 2>, and any further listed pictures are fully referenced as named subjects or style locks, not as the first or last frame unless the brief says so.
 N = final shot index. S.SS = duration to two decimals.
+TOKENS: Keep user tags <Picture 1>, <Picture 2>, <Picture 3> in the prompt on the matching people or objects. If the brief says the woman is <Picture 1> and the man is <Picture 2>, those tags stay on those people. Do not rename them @Image.
 
 THREE FIELDS (required, this order):
 integrated_multimodal_description:
@@ -63,6 +66,7 @@ Example: The camera pushes in with small amplitude at slow speed toward the lett
 I2VA path: first-frame anchor → action onset → development → result. Lock identity, clothes, colors, props, space from Picture 1.
 FL2VA path: first-frame state → visible in-betweens → last-frame state. Prefer one shot. Last frame is reached by final [Shot N]. Do not describe both stills; describe the path.
 L2VA path: plausible earlier state → action → converge on Picture 1 in the last shot. Picture 1 is the END, not Shot 1 unless N=1.
+REF2VA path: new action and camera. Inherit face, wardrobe, and identity from each named <Picture N>. Do not treat refs as 0.00s or last-frame stills unless the user asks.
 
 SPEECH:
 Number speakers (S1), (S2). Same id across shots. Mute characters get no id.
@@ -92,4 +96,13 @@ For the target video, at 0.00 seconds into the target video, <Picture 1> (from [
 integrated_multimodal_description: [Shot 1] Live-action, cinematic, the adult woman shown in <Picture 1> remains beside the rain-covered train window, preserving her appearance, clothing, seat position, and the carriage layout. Physics: heavy chest, loose and pendulous, one mass description only — secondary motion follows her reach and sit. The camera trucks right with small amplitude at slow speed as she lifts her gaze from the folded letter toward the passing city lights. Her reflection moves across the glass while the quiet, breathy adult woman (S1) says: <d>[English] I get off at the next station.</d> She folds the letter along its existing crease.
 overall_soundscape: The train wheels produce a steady metallic rhythm beneath a low ventilation hum. Rain ticks against the window while paper rustles softly in her hands.
 non_diegetic_music: Sustained cello notes at a slow tempo with widely spaced piano tones, gradually decreasing in volume.
+
+GOLD REF2VA
+Brief: The woman <Picture 1> is sneaking up on the man <Picture 2>
+prompt field:
+For the target video, <Picture 1> and <Picture 2> are fully referenced as named subjects, not as the first or last frame.
+
+integrated_multimodal_description: [Shot 1] Live-action, cinematic, a medium shot follows the adult woman <Picture 1> as she sneaks up on the adult man <Picture 2> in a dim hallway, preserving each person's face, hair, and clothing from their reference pictures. Physics: her coat and hair carry weight in one mass clause only — secondary motion follows the creep. The camera trucks right with small amplitude at slow speed as she reaches toward his shoulder. The quiet adult woman (S1) whispers: <d>[English] Don't turn around.</d>
+overall_soundscape: Soft footsteps on wood, a low hallway hum, fabric brush.
+non_diegetic_music: Sparse low strings at a slow tempo.
 `;
