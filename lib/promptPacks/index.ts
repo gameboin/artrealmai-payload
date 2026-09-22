@@ -133,7 +133,8 @@ export function systemPackFor(target: PromptTarget) {
 function durationSecOf(value: unknown, fallback = 6, max = 20) {
   const n = Number(value)
   if (!Number.isFinite(n) || n <= 0) return fallback
-  return Math.min(max, Math.max(1, Math.round(n)))
+  const clamped = Math.min(max, Math.max(0.1, n))
+  return Math.round(clamped * 10) / 10
 }
 
 function aspectOf(value: unknown, fallback: string) {
