@@ -243,7 +243,8 @@ export const promptOptimizeEndpoint: Endpoint = {
       const messages = []
       if (!bareChat && system) messages.push({ role: 'system' as const, content: system })
       messages.push({ role: 'user' as const, content: userContent as never })
-      return deepseekChat(messages, bareChat ? 8192 : 2048, {
+      const maxTokens = bareChat ? 8192 : target === 'nova-dynamic-light' ? 4096 : 2048
+      return deepseekChat(messages, maxTokens, {
         json: !bareChat,
         thinking: bareChat ? true : false,
       })
