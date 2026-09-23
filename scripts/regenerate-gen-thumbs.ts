@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { isVideoGen, makeGenThumbFromUrl } from '../lib/genThumb'
+import { isVideoGen, makeGenThumbFromUrl, makeVideoPosterFromUrl } from '../lib/genThumb'
 
 const FORCE = process.argv.includes('--force')
 const DRY = process.argv.includes('--dry-run')
@@ -24,9 +24,7 @@ async function main() {
   let fail = 0
 
   for (;;) {
-    const clauses: Record<string, unknown>[] = [
-      { or: [{ kind: { exists: false } }, { kind: { not_equals: 'video' } }] },
-    ]
+    const clauses: Record<string, unknown>[] = [{ url: { not_equals: 'blocked://safety' } }]
     if (!ALL) clauses.push({ pinned: { equals: true } })
     if (!FORCE) {
       clauses.push({ or: [{ thumbUrl: { exists: false } }, { thumbUrl: { equals: '' } }] })
@@ -40,7 +38,7 @@ async function main() {
       depth: 0,
       overrideAccess: true,
       sort: '-pinnedAt',
-      where: { and: clauses } as never,
+      ...(clauses.length ? { where: { and: clauses } as never } : {}),
     })
 
     if (!result.docs.length) break
@@ -48,10 +46,6 @@ async function main() {
 
     for (const raw of result.docs) {
       const doc = raw as GenDoc
-      if (isVideoGen(doc.kind, doc.format)) {
-        skip += 1
-        continue
-      }
       if (!FORCE && doc.thumbUrl) {
         skip += 1
         continue
@@ -64,13 +58,15 @@ async function main() {
       }
 
       if (DRY) {
-        console.log('would thumb', doc.id)
+        console.log('would thumb', doc.id, isVideoGen(doc.kind, doc.format) ? 'video' : 'image')
         ok += 1
         continue
       }
 
       try {
-        const thumbUrl = await makeGenThumbFromUrl(url)
+        const thumbUrl = isVideoGen(doc.kind, doc.format)
+          ? await makeVideoPosterFromUrl(url)
+          : await makeGenThumbFromUrl(url)
         if (!thumbUrl) throw new Error('thumb failed')
         await payload.update({
           collection: 'generations' as never,

@@ -3,6 +3,7 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { stripeCheckoutEnabled } from './stripeWallet'
 import { userIsGenAdmin } from '../lib/genAdmin'
+import { makeVideoPosterFromUrl } from '../lib/genThumb'
 import { randomFileName } from '../lib/randomFile'
 
 type VideoKey =
@@ -897,6 +898,7 @@ export const genVideoPollEndpoint: Endpoint = {
       | {
           id: string
           url?: string
+          thumbUrl?: string | null
           prompt?: string
           model?: string
           modelId?: string
@@ -940,6 +942,7 @@ export const genVideoPollEndpoint: Endpoint = {
       return Response.json({
         id: already.id,
         url: already.url,
+        thumbUrl: already.thumbUrl || undefined,
         prompt: already.prompt,
         model: already.model,
         modelId: already.modelId,
@@ -992,10 +995,12 @@ export const genVideoPollEndpoint: Endpoint = {
       )
     }
 
-    let storedUrl = video.url || ''
+    const sourceVideoUrl = video.url || ''
+    let storedUrl = sourceVideoUrl
     let fileBytes = Number(video.file_size) || 0
+    const posterPromise = makeVideoPosterFromUrl(sourceVideoUrl)
     try {
-      const fileRes = await fetch(video.url || '')
+      const fileRes = await fetch(sourceVideoUrl)
       if (fileRes.ok) {
         const bytes = Buffer.from(await fileRes.arrayBuffer())
         fileBytes = bytes.length
@@ -1003,8 +1008,9 @@ export const genVideoPollEndpoint: Endpoint = {
           (await persistToR2(bytes, randomFileName('mp4'), 'video/mp4')) || storedUrl
       }
     } catch {
-      storedUrl = video.url || storedUrl
+      storedUrl = sourceVideoUrl
     }
+    const thumbUrl = (await posterPromise) || ''
     if (!storedUrl) {
       return Response.json(
         { message: 'No video came back. Try again.', blockKind: 'service' },
@@ -1036,6 +1042,7 @@ export const genVideoPollEndpoint: Endpoint = {
         mode: job.mode,
         imageSize: job.aspect,
         url: storedUrl,
+        thumbUrl: thumbUrl || undefined,
         width: video.width,
         height: video.height,
         format: 'MP4',
@@ -1053,6 +1060,7 @@ export const genVideoPollEndpoint: Endpoint = {
     return Response.json({
       id: doc.id,
       url: storedUrl,
+      thumbUrl: thumbUrl || undefined,
       prompt: job.prompt,
       model: model.label,
       modelId: model.key,

@@ -1,6 +1,6 @@
 import type { Endpoint, PayloadRequest } from 'payload'
 import { userIsGenAdmin } from '../lib/genAdmin'
-import { isVideoGen, makeGenThumbFromUrl } from '../lib/genThumb'
+import { isVideoGen, makeGenThumbFromUrl, makeVideoPosterFromUrl } from '../lib/genThumb'
 
 async function authorized(req: PayloadRequest) {
   if (await userIsGenAdmin(req)) return true
@@ -37,9 +37,7 @@ export const regenerateGenThumbsEndpoint: Endpoint = {
     const pinnedOnly = body.pinnedOnly !== false
     const page = force ? Math.max(1, Number(body.page) || 1) : 1
 
-    const clauses: Record<string, unknown>[] = [
-      { or: [{ kind: { exists: false } }, { kind: { not_equals: 'video' } }] },
-    ]
+    const clauses: Record<string, unknown>[] = [{ url: { not_equals: 'blocked://safety' } }]
     if (pinnedOnly) clauses.push({ pinned: { equals: true } })
     if (!force) {
       clauses.push({ or: [{ thumbUrl: { exists: false } }, { thumbUrl: { equals: '' } }] })
@@ -52,7 +50,7 @@ export const regenerateGenThumbsEndpoint: Endpoint = {
       depth: 0,
       overrideAccess: true,
       sort: '-pinnedAt',
-      where: { and: clauses } as never,
+      ...(clauses.length ? { where: { and: clauses } as never } : {}),
     })
 
     const processed: string[] = []
@@ -61,10 +59,6 @@ export const regenerateGenThumbsEndpoint: Endpoint = {
 
     for (const raw of result.docs) {
       const doc = raw as GenDoc
-      if (isVideoGen(doc.kind, doc.format)) {
-        skipped.push(doc.id)
-        continue
-      }
       if (!force && doc.thumbUrl) {
         skipped.push(doc.id)
         continue
@@ -75,7 +69,9 @@ export const regenerateGenThumbsEndpoint: Endpoint = {
         continue
       }
       try {
-        const thumbUrl = await makeGenThumbFromUrl(url)
+        const thumbUrl = isVideoGen(doc.kind, doc.format)
+          ? await makeVideoPosterFromUrl(url)
+          : await makeGenThumbFromUrl(url)
         if (!thumbUrl) throw new Error('thumb failed')
         await req.payload.update({
           collection: 'generations' as never,

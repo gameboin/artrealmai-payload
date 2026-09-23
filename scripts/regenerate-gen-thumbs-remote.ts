@@ -4,6 +4,8 @@ const BASE = process.env.PAYLOAD_PUBLIC_SERVER_URL || 'https://artrealmai-payloa
 const SECRET = process.env.PAYLOAD_SECRET || ''
 const FORCE = process.argv.includes('--force')
 const ALL = process.argv.includes('--all')
+const limitArg = process.argv.find((arg) => arg.startsWith('--limit='))
+const limit = Math.min(8, Math.max(1, Number(limitArg?.split('=')[1]) || 4))
 
 if (!SECRET) {
   console.error('PAYLOAD_SECRET missing in .env')
@@ -22,7 +24,7 @@ async function main() {
         authorization: `Bearer ${SECRET}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ page, limit: 4, force: FORCE, pinnedOnly: !ALL }),
+      body: JSON.stringify({ page, limit, force: FORCE, pinnedOnly: !ALL }),
     })
     const data = (await res.json()) as {
       error?: string
