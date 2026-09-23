@@ -314,7 +314,7 @@ async function outpostHandler(req: PayloadRequest) {
     try {
       const url = new URL(typeof req.url === 'string' ? req.url : '', 'http://local')
       page = Math.max(1, Number(url.searchParams.get('page')) || 1)
-      limit = Math.min(48, Math.max(1, Number(url.searchParams.get('limit')) || 24))
+      limit = Math.min(80, Math.max(1, Number(url.searchParams.get('limit')) || 24))
       q = normalizeHandle(url.searchParams.get('q')) || String(url.searchParams.get('q') || '').trim().toLowerCase()
       kind = String(url.searchParams.get('kind') || '').trim().toLowerCase()
       modelId = String(url.searchParams.get('model') || '').trim()
