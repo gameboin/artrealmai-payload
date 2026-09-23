@@ -445,6 +445,19 @@ function falPayload(
   return body
 }
 
+function hostedImageUrl(raw: unknown) {
+  if (typeof raw !== 'string' || !raw.startsWith('https://')) return ''
+  const domain = process.env.R2_PUBLIC_ACCESS_DOMAIN || ''
+  if (!domain) return ''
+  try {
+    const url = new URL(raw)
+    if (url.protocol !== 'https:' || url.hostname !== domain) return ''
+    return url.toString()
+  } catch {
+    return ''
+  }
+}
+
 function parseDataImage(raw: unknown) {
   if (typeof raw !== 'string' || !raw.startsWith('data:image/')) return null
   const match = raw.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/i)
@@ -1022,6 +1035,11 @@ export const genImageEndpoint: Endpoint = {
         )
       }
       for (const raw of list) {
+        const remote = hostedImageUrl(raw)
+        if (remote) {
+          sourceUrls.push(remote)
+          continue
+        }
         const parsed = parseDataImage(raw)
         if (!parsed) {
           return Response.json(
