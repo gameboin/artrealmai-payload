@@ -360,8 +360,9 @@ function falPayload(
   aspect: string,
   resolution: string,
   seed?: number,
-  imageUrl?: string,
+  imageUrls?: string[],
 ) {
+  const urls = imageUrls && imageUrls.length ? imageUrls : []
   const body: Record<string, unknown> = { prompt }
   if (
     typeof seed === 'number' &&
@@ -374,32 +375,32 @@ function falPayload(
   }
 
   if (model.key === 'flux2pro') {
-    body.image_size = imageUrl && resolution !== '2K' ? 'auto' : fluxImageSize(aspect, resolution)
+    body.image_size = urls.length && resolution !== '2K' ? 'auto' : fluxImageSize(aspect, resolution)
     body.enable_safety_checker = true
     body.safety_tolerance = '2'
     body.output_format = 'jpeg'
-    if (imageUrl) body.image_urls = [imageUrl]
+    if (urls.length) body.image_urls = urls
   } else if (model.key === 'flux2klein9b') {
     body.image_size = fluxImageSize(aspect, resolution)
     body.num_images = 1
     body.num_inference_steps = 4
     body.enable_safety_checker = true
     body.output_format = 'jpeg'
-    if (imageUrl) body.image_urls = [imageUrl]
+    if (urls.length) body.image_urls = urls
   } else if (model.key === 'banana2' || model.key === 'bananapro') {
     body.num_images = 1
-    body.aspect_ratio = imageUrl ? 'auto' : aspect
+    body.aspect_ratio = urls.length ? 'auto' : aspect
     body.output_format = 'jpeg'
     body.safety_tolerance = '4'
     body.resolution = resolution || model.defaultResolution || '1K'
     body.limit_generations = true
-    if (imageUrl) body.image_urls = [imageUrl]
+    if (urls.length) body.image_urls = urls
   } else if (model.key === 'seedream45' || model.key === 'seedream5lite') {
     body.image_size = seedreamImageSize(aspect, resolution)
     body.num_images = 1
     body.max_images = 1
     body.enable_safety_checker = true
-    if (imageUrl) body.image_urls = [imageUrl]
+    if (urls.length) body.image_urls = urls
   } else if (model.key === 'seedream5pro') {
     if (resolution === '4K') {
       const size = seedreamImageSize(aspect)
@@ -413,30 +414,30 @@ function falPayload(
     }
     body.num_images = 1
     body.enable_safety_checker = true
-    if (imageUrl) body.image_urls = [imageUrl]
+    if (urls.length) body.image_urls = urls
   } else if (model.key === 'muse') {
     body.num_images = 1
     body.output_format = 'jpeg'
-    if (imageUrl) body.image_urls = [imageUrl]
+    if (urls.length) body.image_urls = urls
     else body.aspect_ratio = aspect
   } else if (model.key === 'mai25') {
     body.num_images = 1
-    body.aspect_ratio = imageUrl ? 'auto' : aspect
+    body.aspect_ratio = urls.length ? 'auto' : aspect
     body.output_format = 'jpeg'
-    if (imageUrl) body.image_urls = [imageUrl]
+    if (urls.length) body.image_urls = urls
   } else if (model.key === 'gptimage25') {
     body.num_images = 1
     body.quality = resolution === 'high' ? 'high' : 'medium'
     body.image_size = gptImageSize(aspect)
     body.output_format = 'jpeg'
     body.background = 'auto'
-    if (imageUrl) body.image_urls = [imageUrl]
+    if (urls.length) body.image_urls = urls
   } else if (model.key === 'grok') {
     body.num_images = 1
-    body.aspect_ratio = imageUrl ? 'auto' : aspect
+    body.aspect_ratio = urls.length ? 'auto' : aspect
     body.resolution = resolution || model.defaultResolution || '1k'
     body.output_format = 'jpeg'
-    if (imageUrl) body.image_urls = [imageUrl]
+    if (urls.length) body.image_urls = urls
   } else {
     body.aspect_ratio = aspect === '3:4' ? '4:5' : aspect
     body.creativity = 'medium'
@@ -978,6 +979,7 @@ export const genImageEndpoint: Endpoint = {
       imageSize?: unknown
       seed?: unknown
       image?: unknown
+      images?: unknown
       resolution?: unknown
     }
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
@@ -1009,19 +1011,30 @@ export const genImageEndpoint: Endpoint = {
 
     const userId = String(req.user.id)
 
-    let sourceUrl = ''
+    const sourceUrls: string[] = []
     if (mode === 'i2i') {
-      const parsed = parseDataImage(body.image)
-      if (!parsed) {
+      const rawList = Array.isArray(body.images) ? body.images : body.image ? [body.image] : []
+      const list = rawList.slice(0, 9)
+      if (!list.length) {
         return Response.json(
           { message: 'Add a JPEG, PNG, or WebP under 4 MB to use image to image.' },
           { status: 400 },
         )
       }
-      sourceUrl =
-        (await persistToR2(parsed.buffer, randomFileName(parsed.ext), parsed.contentType, 'gens/in')) || ''
-      if (!sourceUrl) {
-        return Response.json({ message: 'Could not store the source image. Try a smaller file.' }, { status: 502 })
+      for (const raw of list) {
+        const parsed = parseDataImage(raw)
+        if (!parsed) {
+          return Response.json(
+            { message: 'Add a JPEG, PNG, or WebP under 4 MB to use image to image.' },
+            { status: 400 },
+          )
+        }
+        const stored =
+          (await persistToR2(parsed.buffer, randomFileName(parsed.ext), parsed.contentType, 'gens/in')) || ''
+        if (!stored) {
+          return Response.json({ message: 'Could not store the source image. Try a smaller file.' }, { status: 502 })
+        }
+        sourceUrls.push(stored)
       }
     }
 
@@ -1058,7 +1071,7 @@ export const genImageEndpoint: Endpoint = {
         Authorization: `Key ${falKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(falPayload(model, prompt, aspect, resolution, seed, sourceUrl || undefined)),
+      body: JSON.stringify(falPayload(model, prompt, aspect, resolution, seed, sourceUrls)),
     })
 
     const falJson = normalizeFalJson(await falRes.json().catch(() => null))
@@ -1200,7 +1213,7 @@ export const genImageEndpoint: Endpoint = {
         bytes: fileBytes || undefined,
         chargedCents,
         durationMs,
-        sourceUrl: sourceUrl || undefined,
+        sourceUrl: sourceUrls[0] || undefined,
       } as never,
     })) as { id: string; createdAt?: string }
 
@@ -1225,7 +1238,7 @@ export const genImageEndpoint: Endpoint = {
       chargedCents,
       priceCents,
       resolution,
-      sourceUrl: sourceUrl || undefined,
+      sourceUrl: sourceUrls[0] || undefined,
       adminComp,
     })
   },

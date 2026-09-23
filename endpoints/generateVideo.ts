@@ -335,7 +335,7 @@ function isFlux3Draft(key: string) {
   return key === 'flux3t2vdraft' || key === 'flux3i2vdraft'
 }
 
-function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect: string, duration: number, resolution: string, imageUrl?: string) {
+function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect: string, duration: number, resolution: string, imageUrl?: string, imageUrls?: string[]) {
   const body: Record<string, unknown> = { prompt }
   if (model.key === 'seedance2fast') {
     body.duration = String(duration)
@@ -347,6 +347,7 @@ function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect
     } else if (aspect && aspect !== 'auto') {
       body.aspect_ratio = aspect
     }
+    if (imageUrls && imageUrls.length > 1) body.image_urls = imageUrls
     return body
   }
   body.duration = duration
@@ -375,6 +376,7 @@ function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect
     if (mode === 't2v' && aspect !== 'auto') body.aspect_ratio = aspect
     if (imageUrl) body.image_url = imageUrl
   }
+  if (imageUrls && imageUrls.length > 1) body.image_urls = imageUrls
   return body
 }
 
@@ -560,6 +562,7 @@ export const genVideoStartEndpoint: Endpoint = {
       duration?: unknown
       resolution?: unknown
       image?: unknown
+      images?: unknown
     }
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
     if (prompt.length < 3) {
@@ -631,20 +634,30 @@ export const genVideoStartEndpoint: Endpoint = {
       )
     }
 
-    let sourceUrl = ''
+    const sourceUrls: string[] = []
     if (mode === 'i2v') {
-      const parsed = parseDataImage(body.image)
-      if (!parsed) {
+      const rawList = Array.isArray(body.images) ? body.images : body.image ? [body.image] : []
+      const list = rawList.slice(0, 9)
+      if (!list.length) {
         return Response.json(
           { message: 'Add a JPEG, PNG, or WebP under 4 MB to use image to video.' },
           { status: 400 },
         )
       }
-      sourceUrl =
-        (await persistToR2(parsed.buffer, randomFileName(parsed.ext), parsed.contentType, 'gens/in')) ||
-        ''
-      if (!sourceUrl) {
-        return Response.json({ message: 'Could not store the source image. Try a smaller file.' }, { status: 502 })
+      for (const raw of list) {
+        const parsed = parseDataImage(raw)
+        if (!parsed) {
+          return Response.json(
+            { message: 'Add a JPEG, PNG, or WebP under 4 MB to use image to video.' },
+            { status: 400 },
+          )
+        }
+        const stored =
+          (await persistToR2(parsed.buffer, randomFileName(parsed.ext), parsed.contentType, 'gens/in')) || ''
+        if (!stored) {
+          return Response.json({ message: 'Could not store the source image. Try a smaller file.' }, { status: 502 })
+        }
+        sourceUrls.push(stored)
       }
     }
 
@@ -653,7 +666,7 @@ export const genVideoStartEndpoint: Endpoint = {
     const submit = await fetch(`https://queue.fal.run/${falId}`, {
       method: 'POST',
       headers: falHeaders(falKey),
-      body: JSON.stringify(videoPayload(model, mode, prompt, aspect, duration, resolution, sourceUrl || undefined)),
+      body: JSON.stringify(videoPayload(model, mode, prompt, aspect, duration, resolution, sourceUrls[0], sourceUrls)),
     })
     const submitJson = (await submit.json().catch(() => null)) as {
       request_id?: string
@@ -696,7 +709,7 @@ export const genVideoStartEndpoint: Endpoint = {
       resolution,
       started,
       priceCents,
-      sourceUrl: sourceUrl || undefined,
+      sourceUrl: sourceUrls[0] || undefined,
     })
     return Response.json({
       pending: true,
