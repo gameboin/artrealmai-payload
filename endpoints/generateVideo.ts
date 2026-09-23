@@ -14,8 +14,10 @@ type VideoKey =
   | 'flux3i2v'
   | 'h3turbo'
   | 'h3max'
+  | 'h3maxref'
   | 'seedance2fast'
-type VideoMode = 't2v' | 'i2v'
+  | 'seedance2fastref'
+type VideoMode = 't2v' | 'i2v' | 'r2v'
 
 type VideoModel = {
   key: VideoKey
@@ -30,6 +32,10 @@ type VideoModel = {
   pricePerSec: Record<string, number>
   defaultDuration: number
   defaultResolution: string
+  /** Reference images included before a per-image surcharge. */
+  freeRefImages?: number
+  /** Cents charged for each reference image past freeRefImages. */
+  refExtraCents?: number
 }
 
 const FLUX3_ASPECTS = ['21:9', '2:1', '16:9', '4:3', '1:1', '3:4', '9:16']
@@ -167,6 +173,26 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
     defaultDuration: 5,
     defaultResolution: '480P',
   },
+  h3maxref: {
+    key: 'h3maxref',
+    label: 'MiniMax H3 Max Reference',
+    blurb: 'Up to 9 images, 5–15s',
+    falT2v: 'minimax/h3-max/reference-to-video',
+    falI2v: 'minimax/h3-max/reference-to-video',
+    modes: ['r2v'],
+    durations: [5, 6, 8, 10, 15],
+    resolutions: [
+      { id: '480P', label: '480p' },
+      { id: '768P', label: '768p' },
+      { id: '1080P', label: '1080p' },
+    ],
+    aspects: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
+    pricePerSec: { '480P': 8, '768P': 13, '1080P': 26 },
+    defaultDuration: 5,
+    defaultResolution: '768P',
+    freeRefImages: 4,
+    refExtraCents: 3,
+  },
   seedance2fast: {
     key: 'seedance2fast',
     label: 'Seedance 2.0 Fast',
@@ -183,6 +209,25 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
     pricePerSec: { '480p': 12, '720p': 30 },
     defaultDuration: 5,
     defaultResolution: '720p',
+  },
+  seedance2fastref: {
+    key: 'seedance2fastref',
+    label: 'Seedance 2.0 Fast Reference',
+    blurb: 'Up to 9 images, @Image tags, 4–15s',
+    falT2v: 'bytedance/seedance-2.0/fast/reference-to-video',
+    falI2v: 'bytedance/seedance-2.0/fast/reference-to-video',
+    modes: ['r2v'],
+    durations: [4, 5, 6, 8, 10, 12, 15],
+    resolutions: [
+      { id: '480p', label: '480p' },
+      { id: '720p', label: '720p' },
+    ],
+    aspects: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
+    pricePerSec: { '480p': 12, '720p': 30 },
+    defaultDuration: 5,
+    defaultResolution: '720p',
+    freeRefImages: 9,
+    refExtraCents: 0,
   },
 }
 
@@ -221,6 +266,8 @@ export function publicVideoModels() {
     defaultResolution: m.defaultResolution,
     priceCents: (m.pricePerSec[m.defaultResolution] || 8) * m.defaultDuration,
     free: false,
+    freeRefImages: m.freeRefImages ?? 0,
+    refExtraCents: m.refExtraCents ?? 0,
   }))
 }
 
@@ -231,6 +278,12 @@ function resolveVideoModel(raw: unknown): VideoModel {
 
 function money(cents: number) {
   return '$' + (Number(cents || 0) / 100).toFixed(2)
+}
+
+function videoPriceCents(model: VideoModel, resolution: string, duration: number, imageCount: number) {
+  const base = (model.pricePerSec[resolution] || 0) * duration
+  const extra = Math.max(0, imageCount - (model.freeRefImages ?? 0)) * (model.refExtraCents || 0)
+  return base + extra
 }
 
 function jobSecret() {
@@ -337,6 +390,27 @@ function isFlux3Draft(key: string) {
 
 function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect: string, duration: number, resolution: string, imageUrl?: string, imageUrls?: string[]) {
   const body: Record<string, unknown> = { prompt }
+  if (model.key === 'h3maxref') {
+    return {
+      prompt,
+      duration,
+      resolution,
+      aspect_ratio: !aspect || aspect === 'auto' ? 'adaptive' : aspect,
+      prompt_expansion_mode: 'disabled',
+      enable_safety_checker: false,
+      reference_image_urls: imageUrls && imageUrls.length ? imageUrls : imageUrl ? [imageUrl] : [],
+    }
+  }
+  if (model.key === 'seedance2fastref') {
+    return {
+      prompt,
+      image_urls: imageUrls && imageUrls.length ? imageUrls : imageUrl ? [imageUrl] : [],
+      resolution,
+      duration: String(duration),
+      aspect_ratio: !aspect || aspect === 'auto' ? 'auto' : aspect,
+      generate_audio: true,
+    }
+  }
   if (model.key === 'seedance2fast') {
     body.duration = String(duration)
     body.resolution = resolution
@@ -529,6 +603,7 @@ export const genVideoStatusEndpoint: Endpoint = {
       modes: [
         { id: 't2v', label: 'Text to video' },
         { id: 'i2v', label: 'Image to video' },
+        { id: 'r2v', label: 'Reference to video' },
       ],
       balanceCents: Number(user.genBalanceCents) || 0,
       stripeEnabled: stripeCheckoutEnabled(),
@@ -573,11 +648,11 @@ export const genVideoStartEndpoint: Endpoint = {
     }
 
     const model = resolveVideoModel(body.model)
-    const mode: VideoMode = body.mode === 'i2v' ? 'i2v' : 't2v'
+    const mode: VideoMode = body.mode === 'r2v' ? 'r2v' : body.mode === 'i2v' ? 'i2v' : 't2v'
     if (!model.modes.includes(mode)) {
       return Response.json(
         {
-          message: `${model.label} does not support ${mode === 'i2v' ? 'image to video' : 'text to video'}.`,
+          message: `${model.label} does not support ${mode === 'r2v' ? 'reference to video' : mode === 'i2v' ? 'image to video' : 'text to video'}.`,
         },
         { status: 400 },
       )
@@ -608,7 +683,9 @@ export const genVideoStartEndpoint: Endpoint = {
       return Response.json({ message: 'Pick a supported resolution.' }, { status: 400 })
     }
 
-    const priceCents = (model.pricePerSec[resolution] || 0) * duration
+    const rawList = Array.isArray(body.images) ? body.images : body.image ? [body.image] : []
+    const imageCount = mode === 't2v' ? 0 : Math.min(9, rawList.length)
+    const priceCents = videoPriceCents(model, resolution, duration, imageCount)
     if (priceCents < 1) {
       return Response.json({ message: 'Could not price that clip.' }, { status: 400 })
     }
@@ -635,12 +712,11 @@ export const genVideoStartEndpoint: Endpoint = {
     }
 
     const sourceUrls: string[] = []
-    if (mode === 'i2v') {
-      const rawList = Array.isArray(body.images) ? body.images : body.image ? [body.image] : []
+    if (mode === 'i2v' || mode === 'r2v') {
       const list = rawList.slice(0, 9)
       if (!list.length) {
         return Response.json(
-          { message: 'Add a JPEG, PNG, or WebP under 4 MB to use image to video.' },
+          { message: mode === 'r2v' ? 'Add at least one reference image.' : 'Add a JPEG, PNG, or WebP under 4 MB to use image to video.' },
           { status: 400 },
         )
       }
@@ -648,7 +724,7 @@ export const genVideoStartEndpoint: Endpoint = {
         const parsed = parseDataImage(raw)
         if (!parsed) {
           return Response.json(
-            { message: 'Add a JPEG, PNG, or WebP under 4 MB to use image to video.' },
+            { message: 'Add a JPEG, PNG, or WebP under 4 MB.' },
             { status: 400 },
           )
         }
@@ -661,7 +737,7 @@ export const genVideoStartEndpoint: Endpoint = {
       }
     }
 
-    const falId = mode === 'i2v' ? model.falI2v : model.falT2v
+    const falId = mode === 'r2v' ? model.falT2v : mode === 'i2v' ? model.falI2v : model.falT2v
     const started = Date.now()
     const submit = await fetch(`https://queue.fal.run/${falId}`, {
       method: 'POST',
