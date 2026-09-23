@@ -69,7 +69,7 @@ export const NL_IMAGE_MODELS = [
 ] as const
 export type NlImageModel = (typeof NL_IMAGE_MODELS)[number]['id']
 export const ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9', '2:1'] as const
-export const MAX_REF_IMAGES = 3
+export const MAX_REF_IMAGES = 9
 
 export function refToken(target: PromptTarget, index: number) {
   const n = index + 1

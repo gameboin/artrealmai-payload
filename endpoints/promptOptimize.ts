@@ -8,7 +8,7 @@ const DAILY_LIMIT = 5
 const PAID_CENTS = 1.5
 const MAX_BRIEF = 4000
 const MAX_IMAGE_BYTES = 1.2 * 1024 * 1024
-const MAX_IMAGES = 3
+const MAX_IMAGES = 9
 const ALLOWED_IMAGE = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 
 type QuotaUser = {
