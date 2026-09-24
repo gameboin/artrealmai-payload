@@ -16,10 +16,12 @@ export const curatePromptStylesEndpoint: Endpoint = {
     if (!(await authorized(req))) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const body = (await req.json?.().catch(() => null)) as {
-      category?: unknown
-      terms?: unknown
-    } | null
+    let body: { category?: unknown; terms?: unknown } | null = null
+    try {
+      body = ((await req.json?.()) || null) as { category?: unknown; terms?: unknown } | null
+    } catch {
+      body = null
+    }
     const category = typeof body?.category === 'string' ? body.category.trim() : ''
     const terms = Array.isArray(body?.terms)
       ? body.terms.map((row) => String(row || '').trim()).filter(Boolean).slice(0, 400)
