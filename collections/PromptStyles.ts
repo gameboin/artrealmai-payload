@@ -34,6 +34,7 @@ export const PromptStyles: CollectionConfig = {
         { label: 'Bodysuits', value: 'bodysuits' },
         { label: 'Clothing Textures', value: 'clothing-textures' },
         { label: 'Metal Textures', value: 'metal-textures' },
+        { label: 'Knights Armor', value: 'knights-armor' },
         { label: 'Footwear', value: 'footwear' },
         { label: 'Accessories', value: 'accessories' },
         { label: 'Makeup', value: 'makeup' },
