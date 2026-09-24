@@ -41,7 +41,7 @@ export const curatePromptStylesEndpoint: Endpoint = {
       const bn = Array.isArray(b.terms) ? b.terms.length : 0
       return bn - an
     })
-    const data = { category, terms: terms.map((text) => ({ text })) }
+    const data = { category, terms: terms.map((text) => ({ text })) } as never
     let id = ''
     if (docs.length) {
       const updated = await req.payload.update({
