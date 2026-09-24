@@ -25,7 +25,6 @@ import { logoLayerEndpoints } from './endpoints/logoLayer'
 import { profileEndpoints } from './endpoints/profile'
 import { regenerateCardSizesEndpoints } from './endpoints/regenerateCardSizes'
 import { regenerateGenThumbsEndpoints } from './endpoints/regenerateGenThumbs'
-import { curatePromptStylesEndpoints } from './endpoints/curatePromptStyles'
 import { promptOptimizeEndpoints } from './endpoints/promptOptimize'
 
 const filename = fileURLToPath(import.meta.url)
@@ -73,7 +72,7 @@ export default buildConfig({
   },
 
   collections: collections,
-  endpoints: [...googleAuthEndpoints, fileDownloadEndpoint, ...generateImageEndpoints, ...generateVideoEndpoints, ...stripeWalletEndpoints, ...logoLayerEndpoints, ...profileEndpoints, ...regenerateCardSizesEndpoints, ...regenerateGenThumbsEndpoints, ...curatePromptStylesEndpoints, ...promptOptimizeEndpoints],
+  endpoints: [...googleAuthEndpoints, fileDownloadEndpoint, ...generateImageEndpoints, ...generateVideoEndpoints, ...stripeWalletEndpoints, ...logoLayerEndpoints, ...profileEndpoints, ...regenerateCardSizesEndpoints, ...regenerateGenThumbsEndpoints, ...promptOptimizeEndpoints],
 
   globals: [
     Homepage,
