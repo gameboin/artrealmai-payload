@@ -41,6 +41,7 @@ export const PromptStyles: CollectionConfig = {
         { label: 'Backgrounds', value: 'backgrounds' },
         { label: 'Mood & Atmosphere', value: 'mood-atmosphere' },
         { label: 'Art Movements', value: 'art-movements' },
+        { label: 'Negative', value: 'negative' },
       ],
     },
     {
