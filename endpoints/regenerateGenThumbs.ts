@@ -26,7 +26,7 @@ export const regenerateGenThumbsEndpoint: Endpoint = {
       return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    let body: { limit?: number; page?: number; force?: boolean; pinnedOnly?: boolean } = {}
+    let body: { limit?: number; page?: number; force?: boolean; pinnedOnly?: boolean; imagesOnly?: boolean } = {}
     try {
       body = (await req.json?.()) || {}
     } catch {
@@ -35,10 +35,15 @@ export const regenerateGenThumbsEndpoint: Endpoint = {
     const limit = Math.min(8, Math.max(1, Number(body.limit) || 4))
     const force = Boolean(body.force)
     const pinnedOnly = body.pinnedOnly !== false
+    const imagesOnly = Boolean(body.imagesOnly)
     const page = force ? Math.max(1, Number(body.page) || 1) : 1
 
     const clauses: Record<string, unknown>[] = [{ url: { not_equals: 'blocked://safety' } }]
     if (pinnedOnly) clauses.push({ pinned: { equals: true } })
+    if (imagesOnly) {
+      clauses.push({ or: [{ kind: { exists: false } }, { kind: { not_equals: 'video' } }] })
+      clauses.push({ or: [{ format: { exists: false } }, { format: { not_equals: 'MP4' } }] })
+    }
     if (!force) {
       clauses.push({ or: [{ thumbUrl: { exists: false } }, { thumbUrl: { equals: '' } }] })
     }

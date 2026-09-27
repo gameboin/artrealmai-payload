@@ -33,7 +33,7 @@ export const Generations: CollectionConfig = {
     {
       name: 'thumbUrl',
       type: 'text',
-      admin: { description: '360×360 WebP for filmstrips and grids. Stills are cropped from the image. Videos use a middle frame. Full file stays on url.' },
+      admin: { description: 'WebP thumb, longest side 360, same shape as the file. Stills are scaled from the image. Videos use a middle frame. Full file stays on url.' },
     },
     { name: 'width', type: 'number' },
     { name: 'height', type: 'number' },

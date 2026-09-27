@@ -38,7 +38,7 @@ export async function makeGenThumbFromBuffer(source: Buffer): Promise<string | n
   try {
     const webp = await sharp(source)
       .rotate()
-      .resize(THUMB, THUMB, { fit: 'cover', position: 'centre' })
+      .resize(THUMB, THUMB, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 72 })
       .toBuffer()
     return persistThumb(webp)
