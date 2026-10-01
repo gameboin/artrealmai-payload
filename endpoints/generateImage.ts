@@ -1379,7 +1379,7 @@ export const genImageEndpoint: Endpoint = {
         const claimed = await claimGenFormat(req, holdId, 'HOLD', { ...savedFields, chargedCents })
         if (claimed) {
           holdId = ''
-          doc = claimed as { id: string; createdAt?: string }
+          doc = claimed as unknown as { id: string; createdAt?: string }
         } else {
           const recovered = await claimGenFormat(req, holdId, 'REFUNDED', {
             ...savedFields,
@@ -1401,7 +1401,7 @@ export const genImageEndpoint: Endpoint = {
           }
           holdId = ''
           paidReserved = false
-          doc = recovered as { id: string; createdAt?: string }
+          doc = recovered as unknown as { id: string; createdAt?: string }
           chargedCents = 0
           nextBalance = walletCents(await loadGenUser(req, userId))
         }

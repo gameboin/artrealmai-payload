@@ -151,7 +151,7 @@ export async function creditPurchase(
   let txId: string | number | undefined
   try {
     const begun = await db.beginTransaction()
-    if (begun != null && !(begun instanceof Promise)) txId = begun
+    if (typeof begun === 'string' || typeof begun === 'number') txId = begun
   } catch {
     txId = undefined
   }
