@@ -55,6 +55,8 @@ export async function deepseekChat(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
+    // Stay under the 300s function limit so a hung call can still be refunded.
+    signal: AbortSignal.timeout(240_000),
   })
   const json = (await res.json().catch(() => null)) as {
     error?: { message?: string }
