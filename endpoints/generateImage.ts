@@ -5,6 +5,7 @@ import { publicVideoModels } from './generateVideo'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { randomFileName } from '../lib/randomFile'
 import { makeGenThumbFromBuffer } from '../lib/genThumb'
+import { creditWallet, debitWallet, hiddenFormatWhere, walletCents } from '../lib/wallet'
 
 const DAILY_LIMIT = 4
 
@@ -652,7 +653,7 @@ async function freeCreditsFromGens(req: PayloadRequest, userId: string) {
       and: [
         { user: { equals: userId } },
         { createdAt: { greater_than_equal: startOfUtcDay().toISOString() } },
-        { format: { not_equals: 'BLOCKED' } },
+        hiddenFormatWhere(),
         {
           or: [{ modelId: { equals: 'flux2klein9b' } }, { modelId: { equals: 'schnell' } }],
         },
@@ -792,7 +793,7 @@ export const genListEndpoint: Endpoint = {
       overrideAccess: true,
       depth: 0,
       where: {
-        and: [{ user: { equals: String(req.user.id) } }, { format: { not_equals: 'BLOCKED' } }],
+        and: [{ user: { equals: String(req.user.id) } }, hiddenFormatWhere()],
       },
       sort: '-createdAt',
       limit,
@@ -1059,43 +1060,74 @@ export const genImageEndpoint: Endpoint = {
     const used = await usedToday(req, userId)
     const remainingFree = Math.max(0, DAILY_LIMIT - used)
     const genUser = await loadGenUser(req, userId)
-    const balanceCents = Number(genUser.genBalanceCents) || 0
+    let balanceCents = Number(genUser.genBalanceCents) || 0
     const adminComp = await userIsGenAdmin(req)
     const creditCost = model.free ? freeCreditCost(resolution) : 0
     const useFree = !adminComp && model.free && remainingFree >= creditCost
-    if (!adminComp && !useFree && balanceCents < priceCents) {
-      const hint = model.free
-        ? `Daily free gens are used. Add funds to keep generating ($${(priceCents / 100).toFixed(2)} each).`
-        : `${model.label} is $${(priceCents / 100).toFixed(2)} each. Add funds to generate.`
-      return Response.json(
-        {
-          message: hint,
-          remaining: remainingFree,
-          balanceCents,
-          priceCents,
-          model: model.label,
-          modelId: model.key,
-          needsFunds: true,
-        },
-        { status: 402 },
-      )
+    let paidReserved = false
+    let chargeKept = false
+    const fundsHint = model.free
+      ? `Daily free gens are used. Add funds to keep generating ($${(priceCents / 100).toFixed(2)} each).`
+      : `${model.label} is $${(priceCents / 100).toFixed(2)} each. Add funds to generate.`
+    if (!adminComp && !useFree) {
+      const debited = await debitWallet(req, userId, priceCents)
+      if (!debited) {
+        const fresh = await loadGenUser(req, userId)
+        return Response.json(
+          {
+            message: fundsHint,
+            remaining: remainingFree,
+            balanceCents: walletCents(fresh),
+            priceCents,
+            model: model.label,
+            modelId: model.key,
+            needsFunds: true,
+          },
+          { status: 402 },
+        )
+      }
+      paidReserved = true
+      balanceCents = walletCents(debited)
+    }
+    const refundReserve = async () => {
+      if (!paidReserved) return
+      paidReserved = false
+      const credited = await creditWallet(req, userId, priceCents)
+      if (credited) balanceCents = walletCents(credited)
     }
 
     const falId = mode === 'i2i' ? model.falEditId || model.falId : model.falId
     const started = Date.now()
-    const falRes = await fetch(`https://fal.run/${falId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Key ${falKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(falPayload(model, prompt, aspect, resolution, seed, sourceUrls)),
-    })
+    let falRes: Response
+    try {
+    try {
+      falRes = await fetch(`https://fal.run/${falId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Key ${falKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(falPayload(model, prompt, aspect, resolution, seed, sourceUrls)),
+      })
+    } catch {
+      await refundReserve()
+      return Response.json(
+        {
+          message: SERVICE_FAIL,
+          remaining: remainingFree,
+          balanceCents,
+          priceCents,
+          blockKind: 'service',
+        },
+        { status: 502 },
+      )
+    }
 
     const falJson = normalizeFalJson(await falRes.json().catch(() => null))
     const outcome = classifyFal(falRes.status, falJson)
 
     if (outcome === 'filtered' || outcome === 'rejected') {
+      if (outcome === 'filtered' && paidReserved) chargeKept = true
       const nextFiltered = filteredToday(genUser) + (outcome === 'filtered' ? 1 : 0)
       const nextRejects = rejectsToday(genUser) + (outcome === 'rejected' ? 1 : 0)
       const nextPenalties =
@@ -1108,15 +1140,12 @@ export const genImageEndpoint: Endpoint = {
 
       let chargedCents = 0
       let nextBalance = balanceCents
-      if (outcome === 'filtered' && !useFree && !adminComp) {
+      if (outcome === 'filtered' && paidReserved) {
         chargedCents = priceCents
-        nextBalance = Math.max(0, balanceCents - priceCents)
-        await req.payload.update({
-          collection: 'users',
-          id: userId,
-          overrideAccess: true,
-          data: { genBalanceCents: nextBalance } as never,
-        })
+        nextBalance = balanceCents
+      } else if (paidReserved) {
+        await refundReserve()
+        nextBalance = balanceCents
       }
 
       const usedAfter = await usedToday(req, userId)
@@ -1151,6 +1180,7 @@ export const genImageEndpoint: Endpoint = {
     }
 
     if (outcome === 'error' || !falRes.ok) {
+      await refundReserve()
       return Response.json(
         {
           message: serviceFailMessage(falRes.status, falJson),
@@ -1165,7 +1195,8 @@ export const genImageEndpoint: Endpoint = {
 
     const image = falJson?.images?.[0]
     if (!image?.url) {
-      return Response.json({ message: 'No image came back. Try again.' }, { status: 502 })
+      await refundReserve()
+      return Response.json({ message: 'No image came back. Try again.', balanceCents }, { status: 502 })
     }
 
     let storedUrl = image.url
@@ -1202,16 +1233,11 @@ export const genImageEndpoint: Endpoint = {
       remaining = Math.max(0, remainingFree - creditCost)
     } else {
       chargedCents = priceCents
-      nextBalance = balanceCents - priceCents
-      await req.payload.update({
-        collection: 'users',
-        id: userId,
-        overrideAccess: true,
-        data: { genBalanceCents: nextBalance } as never,
-      })
+      nextBalance = balanceCents
     }
 
     const usedSeed = typeof falJson?.seed === 'number' ? falJson.seed : seed
+    chargeKept = true
     const doc = (await req.payload.create({
       collection: 'generations' as never,
       overrideAccess: true,
@@ -1259,6 +1285,9 @@ export const genImageEndpoint: Endpoint = {
       sourceUrl: sourceUrls[0] || undefined,
       adminComp,
     })
+    } finally {
+      if (!chargeKept) await refundReserve()
+    }
   },
 }
 

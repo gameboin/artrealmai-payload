@@ -1,5 +1,6 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { assertHandle, avatarUrlOf, clipBio, normalizeHandle, ownerIdOf, PIN_CAP } from '../lib/handle'
+import { hiddenFormatWhere } from '../lib/wallet'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { deleteFromR2 } from './generateImage'
 import { isVideoGen, makeGenThumbFromUrl } from '../lib/genThumb'
@@ -117,7 +118,7 @@ export const profileGetEndpoint: Endpoint = {
         and: [
           { user: { equals: String(user.id) } },
           { pinned: { equals: true } },
-          { format: { not_equals: 'BLOCKED' } },
+          hiddenFormatWhere(),
         ],
       },
     })
@@ -135,7 +136,7 @@ export const profileGetEndpoint: Endpoint = {
         where: {
           and: [
             { user: { equals: String(user.id) } },
-            { format: { not_equals: 'BLOCKED' } },
+            hiddenFormatWhere(),
           ],
         },
       })
@@ -324,7 +325,7 @@ async function outpostHandler(req: PayloadRequest) {
 
     const clauses: Record<string, unknown>[] = [
       { pinned: { equals: true } },
-      { format: { not_equals: 'BLOCKED' } },
+      hiddenFormatWhere(),
     ]
 
     if (kind === 'video') {

@@ -1,5 +1,6 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import Stripe from 'stripe'
+import { creditWallet } from '../lib/wallet'
 
 const PACKS_USD = [5, 15, 40, 100, 500]
 const MIN_CUSTOM_USD = 5
@@ -178,21 +179,8 @@ async function fulfillCheckout(req: PayloadRequest, session: Stripe.Checkout.Ses
     }
   }
 
-  const user = (await req.payload.findByID({
-    collection: 'users',
-    id: userId,
-    depth: 0,
-    overrideAccess: true,
-  })) as { genBalanceCents?: number | null }
-
-  await req.payload.update({
-    collection: 'users',
-    id: userId,
-    overrideAccess: true,
-    data: {
-      genBalanceCents: (Number(user.genBalanceCents) || 0) + amountCents,
-    } as never,
-  })
+  const credited = await creditWallet(req, userId, amountCents)
+  if (!credited) return
 
   await req.payload.update({
     collection: 'gen-purchases' as never,

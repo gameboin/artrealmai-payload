@@ -1,6 +1,7 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { deepseekChat, deepseekEnabled } from '../lib/deepseek'
+import { creditWallet, debitWallet, walletCents } from '../lib/wallet'
 import { buildOptimizeUserText, isAdminPromptTarget, isBareChatTarget, isPromptTarget, systemPackFor, type PromptTarget } from '../lib/promptPacks'
 import { scanPromptSafety } from '../lib/promptSafety'
 
@@ -38,31 +39,18 @@ function usedToday(user: QuotaUser) {
   return Math.max(0, Number(user.promptWriterCount) || 0)
 }
 
-function roundCents(n: number) {
-  return Math.round(n * 10) / 10
-}
-
-async function settleEnhance(
-  req: PayloadRequest,
-  userId: string,
-  user: QuotaUser,
-  opts: { charge: boolean; nextBalance?: number },
-) {
+async function settleEnhance(req: PayloadRequest, userId: string, user: QuotaUser) {
   const day = utcDayKey()
   const used = usedToday(user)
-  const data: Record<string, unknown> = {
-    promptWriterDay: day,
-    promptWriterCount: used + 1,
-  }
-  if (opts.charge && typeof opts.nextBalance === 'number') {
-    data.genBalanceCents = opts.nextBalance
-  }
   await req.payload.update({
     collection: 'users',
     id: userId,
     overrideAccess: true,
     context: { systemQuota: true },
-    data: data as never,
+    data: {
+      promptWriterDay: day,
+      promptWriterCount: used + 1,
+    } as never,
   })
 }
 
@@ -204,19 +192,32 @@ export const promptOptimizeEndpoint: Endpoint = {
     const used = usedToday(user)
     const remainingFree = adminComp ? DAILY_LIMIT : Math.max(0, DAILY_LIMIT - used)
     const useFree = adminComp || remainingFree > 0
-    const balanceCents = Number(user.genBalanceCents) || 0
-    if (!useFree && balanceCents < PAID_CENTS) {
-      return Response.json(
-        {
-          message: `5 free enhances used. Extra ones are 1.5¢ from your Gen wallet.`,
-          needsFunds: true,
-          priceCents: PAID_CENTS,
-          balanceCents,
-          remaining: 0,
-          blockKind: 'funds',
-        },
-        { status: 402 },
-      )
+    let balanceCents = Number(user.genBalanceCents) || 0
+    let paidReserved = false
+    if (!useFree && !adminComp) {
+      const debited = await debitWallet(req, userId, PAID_CENTS)
+      if (!debited) {
+        const fresh = await loadUser(req, userId)
+        return Response.json(
+          {
+            message: `5 free enhances used. Extra ones are 1.5¢ from your Gen wallet.`,
+            needsFunds: true,
+            priceCents: PAID_CENTS,
+            balanceCents: walletCents(fresh),
+            remaining: 0,
+            blockKind: 'funds',
+          },
+          { status: 402 },
+        )
+      }
+      paidReserved = true
+      balanceCents = walletCents(debited)
+    }
+    const refundEnhance = async () => {
+      if (!paidReserved) return
+      paidReserved = false
+      const credited = await creditWallet(req, userId, PAID_CENTS)
+      if (credited) balanceCents = walletCents(credited)
     }
 
     const bareChat = isBareChatTarget(target)
@@ -254,12 +255,13 @@ export const promptOptimizeEndpoint: Endpoint = {
     try {
       result = await once()
     } catch (err) {
+      await refundEnhance()
       const msg = err instanceof Error ? err.message : 'Prompt writer failed.'
       if (msg === 'DEEPSEEK_UNWIRED') {
-        return Response.json({ message: 'Prompt writer is not wired yet.' }, { status: 503 })
+        return Response.json({ message: 'Prompt writer is not wired yet.', balanceCents }, { status: 503 })
       }
       console.warn('prompt-optimize deepseek', { finishReason: 'error' })
-      return Response.json({ message: 'Could not optimize that brief.' }, { status: 502 })
+      return Response.json({ message: 'Could not optimize that brief.', balanceCents }, { status: 502 })
     }
 
     const parse = (content: string) => {
@@ -299,26 +301,28 @@ export const promptOptimizeEndpoint: Endpoint = {
     })
 
     if (result.finishReason === 'content_filter') {
+      await refundEnhance()
       return Response.json(
-        { message: 'That brief was refused. Try a cleaner adult fashion, dance, or public scene.', blockKind: 'filtered' },
+        {
+          message: 'That brief was refused. Try a cleaner adult fashion, dance, or public scene.',
+          blockKind: 'filtered',
+          balanceCents,
+        },
         { status: 422 },
       )
     }
     if (!validated) {
+      await refundEnhance()
       return Response.json(
-        { message: 'No usable prompt came back. Try a clearer adult brief.', blockKind: 'invalid' },
+        { message: 'No usable prompt came back. Try a clearer adult brief.', blockKind: 'invalid', balanceCents },
         { status: 422 },
       )
     }
 
-    let chargedCents = 0
-    let nextBalance = balanceCents
-    if (!adminComp && !useFree) {
-      chargedCents = PAID_CENTS
-      nextBalance = roundCents(Math.max(0, balanceCents - PAID_CENTS))
-    }
+    const chargedCents = paidReserved ? PAID_CENTS : 0
+    const nextBalance = balanceCents
     if (!adminComp) {
-      await settleEnhance(req, userId, user, { charge: chargedCents > 0, nextBalance })
+      await settleEnhance(req, userId, user)
     }
     const remaining = adminComp ? DAILY_LIMIT : Math.max(0, DAILY_LIMIT - used - (useFree ? 1 : 0))
     return Response.json({

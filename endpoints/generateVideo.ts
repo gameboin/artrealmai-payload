@@ -5,6 +5,7 @@ import { stripeCheckoutEnabled } from './stripeWallet'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { makeVideoPosterFromUrl } from '../lib/genThumb'
 import { randomFileName } from '../lib/randomFile'
+import { claimGenFormat, creditWallet, debitWallet, releaseReserved, walletCents } from '../lib/wallet'
 
 type VideoKey =
   | 'grokvid'
@@ -249,8 +250,15 @@ type JobPayload = {
   resolution: string
   started: number
   priceCents: number
+  /** Set when the wallet was debited before the queue submit. Absent on jobs already in flight. */
+  reservedCents?: number
   sourceUrl?: string
   h?: string
+}
+
+function reservedAmount(job: JobPayload) {
+  const amount = Number(job.reservedCents)
+  return Number.isFinite(amount) && amount > 0 ? amount : 0
 }
 
 export function publicVideoModels() {
@@ -299,6 +307,49 @@ function signJob(data: JobPayload) {
   const json = JSON.stringify(body)
   const h = createHmac('sha256', jobSecret()).update(json).digest('hex')
   return Buffer.from(JSON.stringify({ ...body, h })).toString('base64url')
+}
+
+async function findVideoJobRow(req: PayloadRequest, userId: string, requestId: string) {
+  const existing = await req.payload.find({
+    collection: 'generations' as never,
+    overrideAccess: true,
+    limit: 1,
+    where: {
+      and: [{ user: { equals: userId } }, { jobId: { equals: requestId } }],
+    },
+  })
+  return existing.docs[0] as
+    | {
+        id: string
+        url?: string
+        thumbUrl?: string | null
+        prompt?: string
+        model?: string
+        modelId?: string
+        mode?: string
+        imageSize?: string
+        width?: number
+        height?: number
+        format?: string
+        bytes?: number
+        chargedCents?: number
+        durationMs?: number
+        kind?: string
+        durationSec?: number
+        resolution?: string
+        createdAt?: string
+      }
+    | undefined
+}
+
+async function balanceOf(req: PayloadRequest, userId: string) {
+  const user = (await req.payload.findByID({
+    collection: 'users',
+    id: userId,
+    depth: 0,
+    overrideAccess: true,
+  })) as { genBalanceCents?: number | null }
+  return walletCents(user)
 }
 
 function readJob(token: unknown): JobPayload | null {
@@ -517,84 +568,176 @@ async function falRequestCharged(falKey: string, requestId: string, started: num
   return { billed: false, costUsd: 0, confirmed: false }
 }
 
+const TERMINAL_VIDEO_STATUS = new Set(['FAILED', 'ERROR', 'CANCELLED', 'CANCELED'])
+
+function isPlayableGenUrl(url?: string | null) {
+  return Boolean(url && !url.startsWith('hold://') && !url.startsWith('blocked://'))
+}
+
+function blockedVideoBody(
+  job: JobPayload,
+  chargedCents: number,
+  balanceCents: number,
+  adminComp: boolean,
+  takeCredit: boolean,
+  kind: 'policy' | 'service' = 'policy',
+) {
+  const policyMessage =
+    takeCredit && adminComp
+      ? VIDEO_FILTERED_BILLED + ' Admin account · not charged.'
+      : chargedCents
+        ? VIDEO_FILTERED_BILLED
+        : VIDEO_FILTERED_FREE
+  const serviceMessage = chargedCents
+    ? 'The video service failed after the run was billed. This uses 1 gen.'
+    : 'The video service failed. No gen was used. Try again.'
+  return Response.json(
+    {
+      message: kind === 'service' ? serviceMessage : policyMessage,
+      blockKind: kind === 'service' ? 'service' : chargedCents ? 'filtered' : 'rejected',
+      chargedCents,
+      priceCents: job.priceCents,
+      balanceCents,
+    },
+    { status: kind === 'service' ? 502 : 422 },
+  )
+}
+
 async function settleBlockedVideo(
   req: PayloadRequest,
   job: JobPayload,
   currentBalance: number,
   falBill: FalChargeCheck,
+  kind: 'policy' | 'service' = 'policy',
 ) {
-  const existing = await req.payload.find({
-    collection: 'generations' as never,
-    overrideAccess: true,
-    limit: 1,
-    where: {
-      and: [{ user: { equals: job.userId } }, { jobId: { equals: job.requestId } }],
-    },
-  })
-  const already = existing.docs[0] as { format?: string; chargedCents?: number } | undefined
-  if (already?.format === 'BLOCKED') {
-    return Response.json(
-      {
-        message: already.chargedCents ? VIDEO_FILTERED_BILLED : VIDEO_FILTERED_FREE,
-        blockKind: already.chargedCents ? 'filtered' : 'rejected',
-        chargedCents: already.chargedCents || 0,
-        priceCents: job.priceCents,
-        balanceCents: currentBalance,
-      },
-      { status: 422 },
-    )
-  }
+  const already = await findVideoJobRow(req, job.userId, job.requestId)
   const takeCredit = falBill.confirmed && falBill.billed
   const adminComp = await userIsGenAdmin(req)
+  const reserved = reservedAmount(job)
+  if (already?.format === 'BLOCKED' || already?.format === 'REFUNDED') {
+    const chargedCents = already.format === 'REFUNDED' ? 0 : already.chargedCents || 0
+    return blockedVideoBody(job, chargedCents, currentBalance, adminComp, chargedCents > 0, kind)
+  }
   let chargedCents = 0
   let nextBalance = currentBalance
-  if (takeCredit && !adminComp) {
-    chargedCents = job.priceCents
-    nextBalance = Math.max(0, currentBalance - job.priceCents)
-    await req.payload.update({
-      collection: 'users',
-      id: job.userId,
+  if (reserved > 0) {
+    if (takeCredit && !adminComp) {
+      chargedCents = reserved
+      if (already?.format === 'HOLD') {
+        await claimGenFormat(req, already.id, 'HOLD', {
+          format: 'BLOCKED',
+          url: 'blocked://safety',
+          chargedCents: reserved,
+        })
+      }
+    } else if (already?.format === 'HOLD') {
+      const released = await releaseReserved(req, already.id, job.userId, reserved)
+      if (released != null) nextBalance = released
+    }
+  } else if (takeCredit && !adminComp) {
+    const debited = await debitWallet(req, job.userId, job.priceCents)
+    if (debited) {
+      chargedCents = job.priceCents
+      nextBalance = walletCents(debited)
+    }
+  }
+  if (!already) {
+    const model = VIDEO_MODELS[job.model]
+    await req.payload.create({
+      collection: 'generations' as never,
       overrideAccess: true,
-      context: { systemQuota: true },
-      data: { genBalanceCents: nextBalance } as never,
+      data: {
+        user: job.userId,
+        prompt: job.prompt,
+        model: model.label,
+        modelId: model.key,
+        mode: job.mode,
+        imageSize: job.aspect,
+        url: chargedCents ? 'blocked://safety' : 'hold://refunded',
+        format: chargedCents ? 'BLOCKED' : 'REFUNDED',
+        chargedCents,
+        durationMs: Date.now() - job.started,
+        kind: 'video',
+        durationSec: job.duration,
+        resolution: job.resolution,
+        jobId: job.requestId,
+      } as never,
     })
   }
-  const model = VIDEO_MODELS[job.model]
-  await req.payload.create({
-    collection: 'generations' as never,
-    overrideAccess: true,
-    data: {
-      user: job.userId,
-      prompt: job.prompt,
-      model: model.label,
-      modelId: model.key,
-      mode: job.mode,
-      imageSize: job.aspect,
-      url: 'blocked://safety',
-      format: 'BLOCKED',
-      chargedCents,
-      durationMs: Date.now() - job.started,
-      kind: 'video',
-      durationSec: job.duration,
-      resolution: job.resolution,
-      jobId: job.requestId,
-    } as never,
-  })
-  return Response.json(
-    {
-      message:
-        takeCredit && adminComp
-          ? VIDEO_FILTERED_BILLED + ' Admin account · not charged.'
-          : takeCredit
-            ? VIDEO_FILTERED_BILLED
-            : VIDEO_FILTERED_FREE,
-      blockKind: takeCredit ? 'filtered' : 'rejected',
-      chargedCents,
-      priceCents: job.priceCents,
-      balanceCents: nextBalance,
-    },
-    { status: 422 },
+  return blockedVideoBody(
+    job,
+    chargedCents,
+    nextBalance,
+    adminComp,
+    takeCredit && !adminComp && chargedCents > 0,
+    kind,
   )
+}
+
+async function refundOpenHold(
+  req: PayloadRequest,
+  job: JobPayload,
+  row?: { id: string; format?: string },
+) {
+  const reserved = reservedAmount(job)
+  const current = row || (await findVideoJobRow(req, job.userId, job.requestId))
+  if (reserved > 0 && current?.format === 'HOLD') {
+    const released = await releaseReserved(req, current.id, job.userId, reserved)
+    if (released != null) return released
+  }
+  return balanceOf(req, job.userId)
+}
+
+function videoDoneBody(
+  doc: {
+    id: string
+    url?: string | null
+    thumbUrl?: string | null
+    prompt?: string
+    model?: string
+    modelId?: string
+    mode?: string
+    imageSize?: string
+    width?: number | null
+    height?: number | null
+    format?: string
+    bytes?: number | null
+    durationMs?: number
+    kind?: string
+    durationSec?: number
+    resolution?: string
+    createdAt?: string
+    chargedCents?: number
+    sourceUrl?: string
+  },
+  job: JobPayload,
+  balanceCents: number,
+  adminComp?: boolean,
+) {
+  return Response.json({
+    id: doc.id,
+    url: doc.url,
+    thumbUrl: doc.thumbUrl || undefined,
+    prompt: doc.prompt ?? job.prompt,
+    model: doc.model,
+    modelId: doc.modelId,
+    mode: doc.mode ?? job.mode,
+    imageSize: doc.imageSize ?? job.aspect,
+    width: doc.width,
+    height: doc.height,
+    format: doc.format,
+    bytes: doc.bytes,
+    durationMs: doc.durationMs,
+    kind: doc.kind || 'video',
+    durationSec: doc.durationSec ?? job.duration,
+    resolution: doc.resolution ?? job.resolution,
+    createdAt: doc.createdAt,
+    sourceUrl: doc.sourceUrl || job.sourceUrl || undefined,
+    chargedCents: doc.chargedCents || 0,
+    priceCents: job.priceCents,
+    balanceCents,
+    ...(typeof adminComp === 'boolean' ? { adminComp } : {}),
+  })
 }
 
 export const genVideoStatusEndpoint: Endpoint = {
@@ -706,24 +849,6 @@ export const genVideoStartEndpoint: Endpoint = {
 
     const userId = String(req.user.id)
     const adminComp = await userIsGenAdmin(req)
-    const user = (await req.payload.findByID({
-      collection: 'users',
-      id: userId,
-      depth: 0,
-      overrideAccess: true,
-    })) as { genBalanceCents?: number | null }
-    const balanceCents = Number(user.genBalanceCents) || 0
-    if (!adminComp && balanceCents < priceCents) {
-      return Response.json(
-        {
-          message: `${model.label} is ${money(priceCents)} for ${duration}s. Add funds to generate.`,
-          balanceCents,
-          priceCents,
-          needsFunds: true,
-        },
-        { status: 402 },
-      )
-    }
 
     const sourceUrls: string[] = []
     if (mode === 'i2v' || mode === 'r2v') {
@@ -756,13 +881,53 @@ export const genVideoStartEndpoint: Endpoint = {
       }
     }
 
+    let balanceCents = await balanceOf(req, userId)
+    let reservedForJob = 0
+    if (!adminComp) {
+      const debited = await debitWallet(req, userId, priceCents)
+      if (!debited) {
+        return Response.json(
+          {
+            message: `${model.label} is ${money(priceCents)} for ${duration}s. Add funds to generate.`,
+            balanceCents: await balanceOf(req, userId),
+            priceCents,
+            needsFunds: true,
+          },
+          { status: 402 },
+        )
+      }
+      balanceCents = walletCents(debited)
+      reservedForJob = priceCents
+    }
+    const refundSubmit = async () => {
+      if (!reservedForJob) return
+      const amount = reservedForJob
+      reservedForJob = 0
+      const credited = await creditWallet(req, userId, amount)
+      if (credited) balanceCents = walletCents(credited)
+    }
+
     const falId = mode === 'r2v' ? model.falT2v : mode === 'i2v' ? model.falI2v : model.falT2v
     const started = Date.now()
-    const submit = await fetch(`https://queue.fal.run/${falId}`, {
-      method: 'POST',
-      headers: falHeaders(falKey),
-      body: JSON.stringify(videoPayload(model, mode, prompt, aspect, duration, resolution, sourceUrls[0], sourceUrls)),
-    })
+    let submit: Response
+    try {
+      submit = await fetch(`https://queue.fal.run/${falId}`, {
+        method: 'POST',
+        headers: falHeaders(falKey),
+        body: JSON.stringify(videoPayload(model, mode, prompt, aspect, duration, resolution, sourceUrls[0], sourceUrls)),
+      })
+    } catch {
+      await refundSubmit()
+      return Response.json(
+        {
+          message: 'The video service failed. No gen was used. Try again.',
+          blockKind: 'service',
+          balanceCents,
+          priceCents,
+        },
+        { status: 502 },
+      )
+    }
     const submitJson = (await submit.json().catch(() => null)) as {
       request_id?: string
       requestId?: string
@@ -773,6 +938,7 @@ export const genVideoStartEndpoint: Endpoint = {
     } | null
     const requestId = submitJson?.request_id || submitJson?.requestId
     if (!submit.ok || !requestId) {
+      await refundSubmit()
       if (isPolicyFail(submit.status, submitJson)) {
         return Response.json(
           {
@@ -785,9 +951,51 @@ export const genVideoStartEndpoint: Endpoint = {
         )
       }
       return Response.json(
-        { message: 'The video service failed. No gen was used. Try again.', blockKind: 'service' },
+        {
+          message: 'The video service failed. No gen was used. Try again.',
+          blockKind: 'service',
+          balanceCents,
+          priceCents,
+        },
         { status: 502 },
       )
+    }
+
+    if (reservedForJob) {
+      try {
+        await req.payload.create({
+          collection: 'generations' as never,
+          overrideAccess: true,
+          data: {
+            user: userId,
+            prompt,
+            model: model.label,
+            modelId: model.key,
+            mode,
+            imageSize: aspect,
+            url: 'hold://pending',
+            format: 'HOLD',
+            chargedCents: reservedForJob,
+            durationMs: Date.now() - started,
+            kind: 'video',
+            durationSec: duration,
+            resolution,
+            jobId: requestId,
+            sourceUrl: sourceUrls[0] || undefined,
+          } as never,
+        })
+      } catch {
+        await refundSubmit()
+        return Response.json(
+          {
+            message: 'The video service failed. No gen was used. Try again.',
+            blockKind: 'service',
+            balanceCents,
+            priceCents,
+          },
+          { status: 502 },
+        )
+      }
     }
 
     const job = signJob({
@@ -804,6 +1012,7 @@ export const genVideoStartEndpoint: Endpoint = {
       resolution,
       started,
       priceCents,
+      ...(reservedForJob ? { reservedCents: reservedForJob } : {}),
       sourceUrl: sourceUrls[0] || undefined,
     })
     return Response.json({
@@ -814,6 +1023,7 @@ export const genVideoStartEndpoint: Endpoint = {
       priceCents,
       duration,
       resolution,
+      balanceCents,
     })
   },
 }
@@ -854,21 +1064,26 @@ export const genVideoPollEndpoint: Endpoint = {
     if (status === 'IN_QUEUE' || status === 'QUEUED' || status === 'IN_PROGRESS') {
       return Response.json({ pending: true, status: status === 'IN_PROGRESS' ? 'generating' : 'queued' })
     }
+    const jobYoung = Date.now() - job.started < 10 * 60 * 1000
     if (status !== 'COMPLETED') {
-      if (!status || statusRes.status === 404) {
-        if (Date.now() - job.started < 10 * 60 * 1000) {
-          return Response.json({ pending: true, status: 'queued' })
-        }
+      const transient = !status || statusRes.status === 404 || statusRes.status === 429 || statusRes.status >= 500
+      if (transient && jobYoung) {
+        return Response.json({ pending: true, status: 'queued' })
       }
-      if (isPolicyFail(statusRes.status, statusJson)) {
-        const falBill = await falRequestCharged(falKey, job.requestId, job.started)
-        const user = (await req.payload.findByID({
-          collection: 'users',
-          id: job.userId,
-          depth: 0,
-          overrideAccess: true,
-        })) as { genBalanceCents?: number | null }
-        return settleBlockedVideo(req, job, Number(user.genBalanceCents) || 0, falBill)
+      const policy = isPolicyFail(statusRes.status, statusJson)
+      const terminal = policy || TERMINAL_VIDEO_STATUS.has(status) || !jobYoung
+      if (!terminal && jobYoung) {
+        return Response.json({ pending: true, status: 'queued' })
+      }
+      const falBill = await falRequestCharged(falKey, job.requestId, job.started)
+      if (policy || falBill.billed || reservedAmount(job) > 0) {
+        return settleBlockedVideo(
+          req,
+          job,
+          await balanceOf(req, job.userId),
+          falBill,
+          policy ? 'policy' : 'service',
+        )
       }
       return Response.json(
         { message: 'The video service failed. No gen was used. Try again.', blockKind: 'service' },
@@ -938,63 +1153,28 @@ export const genVideoPollEndpoint: Endpoint = {
         { status: 422 },
       )
     }
-    if (already?.url) {
-      return Response.json({
-        id: already.id,
-        url: already.url,
-        thumbUrl: already.thumbUrl || undefined,
-        prompt: already.prompt,
-        model: already.model,
-        modelId: already.modelId,
-        mode: already.mode,
-        imageSize: already.imageSize,
-        width: already.width,
-        height: already.height,
-        format: already.format,
-        bytes: already.bytes,
-        durationMs: already.durationMs,
-        kind: already.kind || 'video',
-        durationSec: already.durationSec,
-        resolution: already.resolution,
-        createdAt: already.createdAt,
-        chargedCents: already.chargedCents || 0,
-        priceCents: job.priceCents,
-        balanceCents: currentBalance,
-      })
+    if (already && isPlayableGenUrl(already.url)) {
+      return videoDoneBody(already, job, currentBalance)
     }
     if (!resultRes.ok || !video?.url) {
       const policy = isPolicyFail(resultRes.status, resultJson)
       const falBill = await falRequestCharged(falKey, job.requestId, job.started)
       if (policy || falBill.billed) {
-        return settleBlockedVideo(req, job, currentBalance, falBill)
+        return settleBlockedVideo(req, job, currentBalance, falBill, policy ? 'policy' : 'service')
       }
+      if (!falBill.confirmed && Date.now() - job.started < 10 * 60 * 1000) {
+        return Response.json({ pending: true, status: 'generating' })
+      }
+      const balanceCents = await refundOpenHold(req, job, already)
       return Response.json(
-        { message: 'No video came back. Try again.', blockKind: 'service' },
+        { message: 'No video came back. Try again.', blockKind: 'service', balanceCents, priceCents: job.priceCents },
         { status: 502 },
       )
     }
 
     const model = VIDEO_MODELS[job.model]
     const adminComp = await userIsGenAdmin(req)
-    const user = (await req.payload.findByID({
-      collection: 'users',
-      id: userId,
-      depth: 0,
-      overrideAccess: true,
-    })) as { genBalanceCents?: number | null }
-    const balanceCents = Number(user.genBalanceCents) || 0
-    if (!adminComp && balanceCents < job.priceCents) {
-      return Response.json(
-        {
-          message: `${model.label} is ${money(job.priceCents)} for ${job.duration}s. Add funds to generate.`,
-          needsFunds: true,
-          balanceCents,
-          priceCents: job.priceCents,
-        },
-        { status: 402 },
-      )
-    }
-
+    const reserved = reservedAmount(job)
     const sourceVideoUrl = video.url || ''
     let storedUrl = sourceVideoUrl
     let fileBytes = Number(video.file_size) || 0
@@ -1012,75 +1192,120 @@ export const genVideoPollEndpoint: Endpoint = {
     }
     const thumbUrl = (await posterPromise) || ''
     if (!storedUrl) {
+      const balanceCents = await refundOpenHold(req, job, already)
       return Response.json(
-        { message: 'No video came back. Try again.', blockKind: 'service' },
+        { message: 'No video came back. Try again.', blockKind: 'service', balanceCents, priceCents: job.priceCents },
         { status: 502 },
       )
     }
 
-    let chargedCents = 0
-    let nextBalance = balanceCents
-    if (!adminComp) {
-      chargedCents = job.priceCents
-      nextBalance = Math.max(0, balanceCents - job.priceCents)
-      await req.payload.update({
-        collection: 'users',
-        id: userId,
-        overrideAccess: true,
-        data: { genBalanceCents: nextBalance } as never,
-      })
-    }
-
-    const doc = (await req.payload.create({
-      collection: 'generations' as never,
-      overrideAccess: true,
-      data: {
-        user: userId,
-        prompt: job.prompt,
-        model: model.label,
-        modelId: model.key,
-        mode: job.mode,
-        imageSize: job.aspect,
-        url: storedUrl,
-        thumbUrl: thumbUrl || undefined,
-        width: video.width,
-        height: video.height,
-        format: 'MP4',
-        bytes: fileBytes || undefined,
-        chargedCents,
-        durationMs: Date.now() - job.started,
-        kind: 'video',
-        durationSec: job.duration,
-        resolution: job.resolution,
-        jobId: job.requestId,
-        sourceUrl: job.sourceUrl || undefined,
-      } as never,
-    })) as { id: string; createdAt?: string }
-
-    return Response.json({
-      id: doc.id,
+    const fileFields = {
       url: storedUrl,
       thumbUrl: thumbUrl || undefined,
-      prompt: job.prompt,
-      model: model.label,
-      modelId: model.key,
-      mode: job.mode,
-      imageSize: job.aspect,
       width: video.width,
       height: video.height,
       format: 'MP4',
       bytes: fileBytes || undefined,
       durationMs: Date.now() - job.started,
+      prompt: job.prompt,
+      model: model.label,
+      modelId: model.key,
+      mode: job.mode,
+      imageSize: job.aspect,
       kind: 'video',
       durationSec: job.duration,
       resolution: job.resolution,
-      createdAt: doc.createdAt || new Date().toISOString(),
       sourceUrl: job.sourceUrl || undefined,
-      chargedCents,
-      priceCents: job.priceCents,
-      balanceCents: nextBalance,
-      adminComp,
-    })
+    }
+
+    if (already?.format === 'HOLD') {
+      const chargedCents = reserved > 0 ? reserved : Number(already.chargedCents) || 0
+      const claimed = await claimGenFormat(req, already.id, 'HOLD', { ...fileFields, chargedCents })
+      if (claimed) {
+        return videoDoneBody(
+          { id: already.id, createdAt: already.createdAt, ...fileFields, chargedCents },
+          job,
+          currentBalance,
+          adminComp,
+        )
+      }
+      const winner = await findVideoJobRow(req, userId, job.requestId)
+      if (winner && isPlayableGenUrl(winner.url)) {
+        return videoDoneBody(winner, job, await balanceOf(req, userId), adminComp)
+      }
+      if (winner?.format === 'REFUNDED') {
+        const recovered = await claimGenFormat(req, winner.id, 'REFUNDED', { ...fileFields, chargedCents: 0 })
+        if (recovered) {
+          return videoDoneBody(
+            { id: winner.id, createdAt: winner.createdAt, ...fileFields, chargedCents: 0 },
+            job,
+            await balanceOf(req, userId),
+            adminComp,
+          )
+        }
+      }
+      return Response.json({ pending: true, status: 'generating' })
+    }
+
+    if (already?.format === 'REFUNDED') {
+      const recovered = await claimGenFormat(req, already.id, 'REFUNDED', { ...fileFields, chargedCents: 0 })
+      if (recovered) {
+        return videoDoneBody(
+          { id: already.id, createdAt: already.createdAt, ...fileFields, chargedCents: 0 },
+          job,
+          currentBalance,
+          adminComp,
+        )
+      }
+      const winner = await findVideoJobRow(req, userId, job.requestId)
+      if (winner && isPlayableGenUrl(winner.url)) {
+        return videoDoneBody(winner, job, await balanceOf(req, userId), adminComp)
+      }
+      return Response.json({ pending: true, status: 'generating' })
+    }
+
+    let chargedCents = 0
+    let nextBalance = currentBalance
+    if (reserved > 0) {
+      chargedCents = reserved
+    } else if (!adminComp) {
+      const debited = await debitWallet(req, userId, job.priceCents)
+      if (!debited) {
+        return Response.json(
+          {
+            message: `${model.label} is ${money(job.priceCents)} for ${job.duration}s. Add funds to generate.`,
+            needsFunds: true,
+            balanceCents: await balanceOf(req, userId),
+            priceCents: job.priceCents,
+          },
+          { status: 402 },
+        )
+      }
+      chargedCents = job.priceCents
+      nextBalance = walletCents(debited)
+    }
+
+    try {
+      const doc = (await req.payload.create({
+        collection: 'generations' as never,
+        overrideAccess: true,
+        data: {
+          user: userId,
+          ...fileFields,
+          chargedCents,
+          jobId: job.requestId,
+        } as never,
+      })) as { id: string; createdAt?: string }
+      return videoDoneBody(
+        { id: doc.id, createdAt: doc.createdAt || new Date().toISOString(), ...fileFields, chargedCents },
+        job,
+        nextBalance,
+        adminComp,
+      )
+    } catch (err) {
+      if (reserved <= 0 && chargedCents > 0) await creditWallet(req, userId, chargedCents)
+      throw err
+    }
   },
 }
 

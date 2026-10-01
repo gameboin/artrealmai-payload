@@ -1,5 +1,6 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { userIsGenAdmin } from '../lib/genAdmin'
+import { creditWallet, debitWallet, walletCents } from '../lib/wallet'
 import { stripeCheckoutEnabled } from './stripeWallet'
 
 const DAILY_FREE = 2
@@ -124,13 +125,15 @@ export const logoLayerChargeEndpoint: Endpoint = {
     }
 
     const chargedCents = count * unit
-    if (balanceCents < chargedCents) {
+    const debited = await debitWallet(req, userId, chargedCents)
+    if (!debited) {
+      const fresh = await loadUser(req, userId)
       return Response.json(
         {
           message: `This batch is $${(chargedCents / 100).toFixed(2)} (${count} × ${unit}¢). Add funds to export.`,
           needsFunds: true,
           chargedCents,
-          balanceCents,
+          balanceCents: walletCents(fresh),
           remainingFree: 0,
           imageCents: IMAGE_CENTS,
           videoCents: VIDEO_CENTS,
@@ -139,23 +142,26 @@ export const logoLayerChargeEndpoint: Endpoint = {
       )
     }
 
-    const nextBalance = balanceCents - chargedCents
-    await req.payload.update({
-      collection: 'users',
-      id: userId,
-      overrideAccess: true,
-      context: { systemQuota: true },
-      data: {
-        genBalanceCents: nextBalance,
-        logoLayerDay: day,
-        logoLayerBatches: used,
-      } as never,
-    })
+    try {
+      await req.payload.update({
+        collection: 'users',
+        id: userId,
+        overrideAccess: true,
+        context: { systemQuota: true },
+        data: {
+          logoLayerDay: day,
+          logoLayerBatches: used,
+        } as never,
+      })
+    } catch (err) {
+      await creditWallet(req, userId, chargedCents)
+      throw err
+    }
     return Response.json({
       free: false,
       chargedCents,
       remainingFree: 0,
-      balanceCents: nextBalance,
+      balanceCents: walletCents(debited),
       count,
       kind,
       adminComp: false,
