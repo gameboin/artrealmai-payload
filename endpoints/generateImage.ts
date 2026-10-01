@@ -1237,29 +1237,44 @@ export const genImageEndpoint: Endpoint = {
     }
 
     const usedSeed = typeof falJson?.seed === 'number' ? falJson.seed : seed
+    let doc: { id: string; createdAt?: string }
+    try {
+      doc = (await req.payload.create({
+        collection: 'generations' as never,
+        overrideAccess: true,
+        data: {
+          user: userId,
+          prompt,
+          model: model.label,
+          modelId: model.key,
+          mode,
+          imageSize: resolution ? aspect + ' · ' + resolution : aspect,
+          seed: usedSeed,
+          url: storedUrl,
+          thumbUrl: thumbUrl || undefined,
+          width: image.width,
+          height: image.height,
+          format: fileFormat,
+          bytes: fileBytes || undefined,
+          chargedCents,
+          durationMs,
+          sourceUrl: sourceUrls[0] || undefined,
+        } as never,
+      })) as { id: string; createdAt?: string }
+    } catch {
+      await refundReserve()
+      return Response.json(
+        {
+          message: 'The image could not be saved. No gen was used. Try again.',
+          remaining: remainingFree,
+          balanceCents,
+          priceCents,
+          blockKind: 'service',
+        },
+        { status: 502 },
+      )
+    }
     chargeKept = true
-    const doc = (await req.payload.create({
-      collection: 'generations' as never,
-      overrideAccess: true,
-      data: {
-        user: userId,
-        prompt,
-        model: model.label,
-        modelId: model.key,
-        mode,
-        imageSize: resolution ? aspect + ' · ' + resolution : aspect,
-        seed: usedSeed,
-        url: storedUrl,
-        thumbUrl: thumbUrl || undefined,
-        width: image.width,
-        height: image.height,
-        format: fileFormat,
-        bytes: fileBytes || undefined,
-        chargedCents,
-        durationMs,
-        sourceUrl: sourceUrls[0] || undefined,
-      } as never,
-    })) as { id: string; createdAt?: string }
 
     return Response.json({
       id: doc.id,
