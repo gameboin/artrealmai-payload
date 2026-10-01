@@ -5,6 +5,7 @@ import { stripeCheckoutEnabled } from './stripeWallet'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { makeVideoPosterFromUrl } from '../lib/genThumb'
 import { randomFileName } from '../lib/randomFile'
+import { sweepStaleHolds } from '../lib/holdSweep'
 import { claimGenFormat, creditWallet, debitWallet, releaseReserved, walletCents } from '../lib/wallet'
 
 type VideoKey =
@@ -1044,6 +1045,7 @@ export const genVideoPollEndpoint: Endpoint = {
     } catch {
       return Response.json({ message: 'Invalid request body.' }, { status: 400 })
     }
+    await sweepStaleHolds(req)
     const token = (req.data as { job?: unknown } | undefined)?.job
     const job = readJob(token)
     if (!job || job.userId !== String(req.user.id)) {

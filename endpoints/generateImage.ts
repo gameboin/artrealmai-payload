@@ -5,7 +5,17 @@ import { publicVideoModels } from './generateVideo'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { randomFileName } from '../lib/randomFile'
 import { makeGenThumbFromBuffer } from '../lib/genThumb'
-import { creditWallet, debitWallet, hiddenFormatWhere, walletCents } from '../lib/wallet'
+import { sweepStaleHolds } from '../lib/holdSweep'
+import {
+  claimDailySlot,
+  claimGenFormat,
+  creditWallet,
+  debitWallet,
+  hiddenFormatWhere,
+  releaseDailySlot,
+  releaseReserved,
+  walletCents,
+} from '../lib/wallet'
 
 const DAILY_LIMIT = 4
 
@@ -586,6 +596,8 @@ type GenUser = {
   genBlockCount?: number | null
   genRejectCount?: number | null
   genBalanceCents?: number | null
+  genFreeDay?: string | null
+  genFreeCount?: number | null
 }
 
 function r2Client() {
@@ -675,6 +687,8 @@ async function loadGenUser(req: PayloadRequest, userId: string) {
     id: userId,
     depth: 0,
     overrideAccess: true,
+    showHiddenFields: true,
+    context: { systemQuota: true },
   })) as GenUser
 }
 
@@ -699,8 +713,45 @@ function rejectsToday(user: GenUser) {
 
 async function usedToday(req: PayloadRequest, userId: string) {
   const user = await loadGenUser(req, userId)
+  if (user.genFreeDay === utcDayKey()) return Math.max(0, Number(user.genFreeCount) || 0)
   const gens = await freeCreditsFromGens(req, userId)
   return gens + penaltySlotsForToday(user)
+}
+
+/** Reserve Klein free credits without two requests both reading the same leftover. */
+async function claimImageFree(req: PayloadRequest, userId: string, cost: number) {
+  const day = utcDayKey()
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const user = await loadGenUser(req, userId)
+    const ledger = (await freeCreditsFromGens(req, userId)) + penaltySlotsForToday(user)
+    const sameDay = user.genFreeDay === day
+    if (sameDay && ledger > 0) {
+      await req.payload.db.updateOne({
+        collection: 'users',
+        where: {
+          and: [
+            { id: { equals: userId } },
+            { genFreeDay: { equals: day } },
+            { genFreeCount: { less_than: ledger } },
+          ],
+        },
+        data: { genFreeCount: ledger },
+        returning: false,
+      })
+    }
+    const claimed = await claimDailySlot(
+      req,
+      userId,
+      'genFreeDay',
+      'genFreeCount',
+      day,
+      DAILY_LIMIT,
+      cost,
+      sameDay ? undefined : ledger + cost,
+    )
+    if (claimed) return claimed as { genFreeCount?: number }
+  }
+  return null
 }
 
 async function saveSafetyDay(
@@ -730,6 +781,7 @@ export const genStatusEndpoint: Endpoint = {
       return Response.json({ message: 'Sign in to generate.' }, { status: 401 })
     }
     const userId = String(req.user.id)
+    await sweepStaleHolds(req)
     const used = await usedToday(req, userId)
     const genUser = await loadGenUser(req, userId)
     const remaining = Math.max(0, DAILY_LIMIT - used)
@@ -970,6 +1022,7 @@ export const genImageEndpoint: Endpoint = {
     if (!req.user) {
       return Response.json({ message: 'Sign in to generate.' }, { status: 401 })
     }
+    await sweepStaleHolds(req)
 
     const falKey = process.env.FAL_KEY || ''
     if (!falKey) {
@@ -1063,13 +1116,23 @@ export const genImageEndpoint: Endpoint = {
     let balanceCents = Number(genUser.genBalanceCents) || 0
     const adminComp = await userIsGenAdmin(req)
     const creditCost = model.free ? freeCreditCost(resolution) : 0
-    const useFree = !adminComp && model.free && remainingFree >= creditCost
+    const quotaDay = utcDayKey()
+    let freeClaimed = false
+    let freeCount = 0
     let paidReserved = false
+    let holdId = ''
     let chargeKept = false
+    if (!adminComp && model.free && creditCost > 0) {
+      const slot = await claimImageFree(req, userId, creditCost)
+      if (slot) {
+        freeClaimed = true
+        freeCount = Number(slot.genFreeCount) || creditCost
+      }
+    }
     const fundsHint = model.free
       ? `Daily free gens are used. Add funds to keep generating ($${(priceCents / 100).toFixed(2)} each).`
       : `${model.label} is $${(priceCents / 100).toFixed(2)} each. Add funds to generate.`
-    if (!adminComp && !useFree) {
+    if (!adminComp && !freeClaimed) {
       const debited = await debitWallet(req, userId, priceCents)
       if (!debited) {
         const fresh = await loadGenUser(req, userId)
@@ -1088,8 +1151,55 @@ export const genImageEndpoint: Endpoint = {
       }
       paidReserved = true
       balanceCents = walletCents(debited)
+      try {
+        const hold = (await req.payload.db.create({
+          collection: 'generations',
+          data: {
+            user: userId,
+            prompt,
+            model: model.label,
+            modelId: model.key,
+            mode,
+            imageSize: resolution ? aspect + ' · ' + resolution : aspect,
+            url: 'hold://pending',
+            format: 'HOLD',
+            chargedCents: priceCents,
+            kind: 'image',
+            sourceUrl: sourceUrls[0] || undefined,
+          },
+        })) as { id?: string } | null
+        holdId = hold?.id ? String(hold.id) : ''
+        if (!holdId) throw new Error('hold')
+      } catch {
+        paidReserved = false
+        const credited = await creditWallet(req, userId, priceCents)
+        if (credited) balanceCents = walletCents(credited)
+        return Response.json(
+          {
+            message: 'The image could not be saved. No gen was used. Try again.',
+            remaining: remainingFree,
+            balanceCents,
+            priceCents,
+            blockKind: 'service',
+          },
+          { status: 502 },
+        )
+      }
+    }
+    const releaseFree = async () => {
+      if (!freeClaimed) return
+      freeClaimed = false
+      await releaseDailySlot(req, userId, 'genFreeDay', 'genFreeCount', quotaDay, creditCost)
     }
     const refundReserve = async () => {
+      if (holdId) {
+        const id = holdId
+        holdId = ''
+        paidReserved = false
+        const released = await releaseReserved(req, id, userId, priceCents)
+        if (released != null) balanceCents = released
+        return
+      }
       if (!paidReserved) return
       paidReserved = false
       const credited = await creditWallet(req, userId, priceCents)
@@ -1127,11 +1237,26 @@ export const genImageEndpoint: Endpoint = {
     const outcome = classifyFal(falRes.status, falJson)
 
     if (outcome === 'filtered' || outcome === 'rejected') {
-      if (outcome === 'filtered' && paidReserved) chargeKept = true
+      if (outcome === 'filtered' && paidReserved) {
+        if (holdId) {
+          try {
+            await claimGenFormat(req, holdId, 'HOLD', {
+              format: 'BLOCKED',
+              url: 'blocked://safety',
+              chargedCents: priceCents,
+            })
+          } catch {
+            // The debit stays. The hold is no longer released by the request.
+          }
+          holdId = ''
+        }
+        chargeKept = true
+      }
+      if (outcome === 'filtered' && freeClaimed) chargeKept = true
       const nextFiltered = filteredToday(genUser) + (outcome === 'filtered' ? 1 : 0)
       const nextRejects = rejectsToday(genUser) + (outcome === 'rejected' ? 1 : 0)
       const nextPenalties =
-        penaltySlotsForToday(genUser) + (outcome === 'filtered' && useFree && !adminComp ? creditCost : 0)
+        penaltySlotsForToday(genUser) + (outcome === 'filtered' && freeClaimed && !adminComp ? creditCost : 0)
       await saveSafetyDay(req, userId, {
         filtered: nextFiltered,
         rejects: nextRejects,
@@ -1154,7 +1279,7 @@ export const genImageEndpoint: Endpoint = {
       if (outcome === 'filtered') {
         if (adminComp) {
           message = `${FILTERED_LEAD} Admin account · not charged.`
-        } else if (useFree) {
+        } else if (freeClaimed) {
           message = `${FILTERED_LEAD} Used ${creditCost} free credit${creditCost === 1 ? '' : 's'}. ${remaining} left today.`
         } else {
           message = `${FILTERED_LEAD} Used 1 ${model.label} gen (${money(priceCents)}). Balance ${money(nextBalance)}.`
@@ -1229,40 +1354,76 @@ export const genImageEndpoint: Endpoint = {
     let remaining = remainingFree
     if (adminComp) {
       remaining = remainingFree
-    } else if (useFree) {
-      remaining = Math.max(0, remainingFree - creditCost)
+    } else if (freeClaimed) {
+      remaining = Math.max(0, DAILY_LIMIT - freeCount)
     } else {
       chargedCents = priceCents
       nextBalance = balanceCents
     }
 
     const usedSeed = typeof falJson?.seed === 'number' ? falJson.seed : seed
+    const savedFields = {
+      url: storedUrl,
+      thumbUrl: thumbUrl || undefined,
+      width: image.width,
+      height: image.height,
+      format: fileFormat,
+      bytes: fileBytes || undefined,
+      durationMs,
+      seed: usedSeed,
+      sourceUrl: sourceUrls[0] || undefined,
+    }
     let doc: { id: string; createdAt?: string }
     try {
-      doc = (await req.payload.create({
-        collection: 'generations' as never,
-        overrideAccess: true,
-        data: {
-          user: userId,
-          prompt,
-          model: model.label,
-          modelId: model.key,
-          mode,
-          imageSize: resolution ? aspect + ' · ' + resolution : aspect,
-          seed: usedSeed,
-          url: storedUrl,
-          thumbUrl: thumbUrl || undefined,
-          width: image.width,
-          height: image.height,
-          format: fileFormat,
-          bytes: fileBytes || undefined,
-          chargedCents,
-          durationMs,
-          sourceUrl: sourceUrls[0] || undefined,
-        } as never,
-      })) as { id: string; createdAt?: string }
+      if (holdId) {
+        const claimed = await claimGenFormat(req, holdId, 'HOLD', { ...savedFields, chargedCents })
+        if (claimed) {
+          holdId = ''
+          doc = claimed as { id: string; createdAt?: string }
+        } else {
+          const recovered = await claimGenFormat(req, holdId, 'REFUNDED', {
+            ...savedFields,
+            chargedCents: 0,
+          })
+          if (!recovered) {
+            await refundReserve()
+            await releaseFree()
+            return Response.json(
+              {
+                message: 'The image could not be saved. No gen was used. Try again.',
+                remaining: remainingFree,
+                balanceCents,
+                priceCents,
+                blockKind: 'service',
+              },
+              { status: 502 },
+            )
+          }
+          holdId = ''
+          paidReserved = false
+          doc = recovered as { id: string; createdAt?: string }
+          chargedCents = 0
+          nextBalance = walletCents(await loadGenUser(req, userId))
+        }
+      } else {
+        doc = (await req.payload.create({
+          collection: 'generations' as never,
+          overrideAccess: true,
+          data: {
+            user: userId,
+            prompt,
+            model: model.label,
+            modelId: model.key,
+            mode,
+            imageSize: resolution ? aspect + ' · ' + resolution : aspect,
+            chargedCents,
+            ...savedFields,
+          } as never,
+        })) as { id: string; createdAt?: string }
+      }
     } catch {
       await refundReserve()
+      await releaseFree()
       return Response.json(
         {
           message: 'The image could not be saved. No gen was used. Try again.',
@@ -1301,7 +1462,10 @@ export const genImageEndpoint: Endpoint = {
       adminComp,
     })
     } finally {
-      if (!chargeKept) await refundReserve()
+      if (!chargeKept) {
+        await refundReserve()
+        await releaseFree()
+      }
     }
   },
 }

@@ -1,7 +1,7 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { userIsGenAdmin } from '../lib/genAdmin'
 import { deepseekChat, deepseekEnabled } from '../lib/deepseek'
-import { creditWallet, debitWallet, walletCents } from '../lib/wallet'
+import { claimDailySlot, creditWallet, debitWallet, releaseDailySlot, walletCents } from '../lib/wallet'
 import { buildOptimizeUserText, isAdminPromptTarget, isBareChatTarget, isPromptTarget, systemPackFor, type PromptTarget } from '../lib/promptPacks'
 import { scanPromptSafety } from '../lib/promptSafety'
 
@@ -37,21 +37,6 @@ function usedToday(user: QuotaUser) {
   const day = utcDayKey()
   if (user.promptWriterDay !== day) return 0
   return Math.max(0, Number(user.promptWriterCount) || 0)
-}
-
-async function settleEnhance(req: PayloadRequest, userId: string, user: QuotaUser) {
-  const day = utcDayKey()
-  const used = usedToday(user)
-  await req.payload.update({
-    collection: 'users',
-    id: userId,
-    overrideAccess: true,
-    context: { systemQuota: true },
-    data: {
-      promptWriterDay: day,
-      promptWriterCount: used + 1,
-    } as never,
-  })
 }
 
 function parseImage(raw: unknown): { mime: string; dataUrl: string } | null {
@@ -189,12 +174,38 @@ export const promptOptimizeEndpoint: Endpoint = {
     const images = parseImages(body)
     const userId = String(req.user.id)
     const user = await loadUser(req, userId)
-    const used = usedToday(user)
-    const remainingFree = adminComp ? DAILY_LIMIT : Math.max(0, DAILY_LIMIT - used)
-    const useFree = adminComp || remainingFree > 0
     let balanceCents = Number(user.genBalanceCents) || 0
     let paidReserved = false
-    if (!useFree && !adminComp) {
+    let freeClaimed = false
+    let freeCount = 0
+    const quotaDay = utcDayKey()
+    if (!adminComp) {
+      let slot = await claimDailySlot(
+        req,
+        userId,
+        'promptWriterDay',
+        'promptWriterCount',
+        quotaDay,
+        DAILY_LIMIT,
+        1,
+      )
+      if (!slot) {
+        slot = await claimDailySlot(
+          req,
+          userId,
+          'promptWriterDay',
+          'promptWriterCount',
+          quotaDay,
+          DAILY_LIMIT,
+          1,
+        )
+      }
+      if (slot) {
+        freeClaimed = true
+        freeCount = Number((slot as { promptWriterCount?: number }).promptWriterCount) || 1
+      }
+    }
+    if (!adminComp && !freeClaimed) {
       const debited = await debitWallet(req, userId, PAID_CENTS)
       if (!debited) {
         const fresh = await loadUser(req, userId)
@@ -213,11 +224,16 @@ export const promptOptimizeEndpoint: Endpoint = {
       paidReserved = true
       balanceCents = walletCents(debited)
     }
-    const refundEnhance = async () => {
-      if (!paidReserved) return
-      paidReserved = false
-      const credited = await creditWallet(req, userId, PAID_CENTS)
-      if (credited) balanceCents = walletCents(credited)
+    const unwindEnhance = async () => {
+      if (paidReserved) {
+        paidReserved = false
+        const credited = await creditWallet(req, userId, PAID_CENTS)
+        if (credited) balanceCents = walletCents(credited)
+      }
+      if (freeClaimed) {
+        freeClaimed = false
+        await releaseDailySlot(req, userId, 'promptWriterDay', 'promptWriterCount', quotaDay, 1)
+      }
     }
 
     const bareChat = isBareChatTarget(target)
@@ -255,7 +271,7 @@ export const promptOptimizeEndpoint: Endpoint = {
     try {
       result = await once()
     } catch (err) {
-      await refundEnhance()
+      await unwindEnhance()
       const msg = err instanceof Error ? err.message : 'Prompt writer failed.'
       if (msg === 'DEEPSEEK_UNWIRED') {
         return Response.json({ message: 'Prompt writer is not wired yet.', balanceCents }, { status: 503 })
@@ -301,7 +317,7 @@ export const promptOptimizeEndpoint: Endpoint = {
     })
 
     if (result.finishReason === 'content_filter') {
-      await refundEnhance()
+      await unwindEnhance()
       return Response.json(
         {
           message: 'That brief was refused. Try a cleaner adult fashion, dance, or public scene.',
@@ -312,7 +328,7 @@ export const promptOptimizeEndpoint: Endpoint = {
       )
     }
     if (!validated) {
-      await refundEnhance()
+      await unwindEnhance()
       return Response.json(
         { message: 'No usable prompt came back. Try a clearer adult brief.', blockKind: 'invalid', balanceCents },
         { status: 422 },
@@ -321,10 +337,11 @@ export const promptOptimizeEndpoint: Endpoint = {
 
     const chargedCents = paidReserved ? PAID_CENTS : 0
     const nextBalance = balanceCents
-    if (!adminComp) {
-      await settleEnhance(req, userId, user)
-    }
-    const remaining = adminComp ? DAILY_LIMIT : Math.max(0, DAILY_LIMIT - used - (useFree ? 1 : 0))
+    const remaining = adminComp
+      ? DAILY_LIMIT
+      : freeClaimed
+        ? Math.max(0, DAILY_LIMIT - freeCount)
+        : 0
     return Response.json({
       ...validated,
       remaining,

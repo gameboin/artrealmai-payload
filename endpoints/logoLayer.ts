@@ -1,6 +1,6 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import { userIsGenAdmin } from '../lib/genAdmin'
-import { creditWallet, debitWallet, walletCents } from '../lib/wallet'
+import { claimDailySlot, debitWallet, walletCents } from '../lib/wallet'
 import { stripeCheckoutEnabled } from './stripeWallet'
 
 const DAILY_FREE = 2
@@ -86,7 +86,6 @@ export const logoLayerChargeEndpoint: Endpoint = {
     const adminComp = await userIsGenAdmin(req)
     const user = await loadUser(req, userId)
     const day = utcDayKey()
-    const used = usedToday(user)
     const balanceCents = Number(user.genBalanceCents) || 0
     const unit = kind === 'video' ? VIDEO_CENTS : IMAGE_CENTS
 
@@ -102,21 +101,14 @@ export const logoLayerChargeEndpoint: Endpoint = {
       })
     }
 
-    if (used < DAILY_FREE) {
-      await req.payload.update({
-        collection: 'users',
-        id: userId,
-        overrideAccess: true,
-        context: { systemQuota: true },
-        data: {
-          logoLayerDay: day,
-          logoLayerBatches: used + 1,
-        } as never,
-      })
+    let slot = await claimDailySlot(req, userId, 'logoLayerDay', 'logoLayerBatches', day, DAILY_FREE, 1)
+    if (!slot) slot = await claimDailySlot(req, userId, 'logoLayerDay', 'logoLayerBatches', day, DAILY_FREE, 1)
+    if (slot) {
+      const batches = Number((slot as { logoLayerBatches?: number }).logoLayerBatches) || 1
       return Response.json({
         free: true,
         chargedCents: 0,
-        remainingFree: DAILY_FREE - used - 1,
+        remainingFree: Math.max(0, DAILY_FREE - batches),
         balanceCents,
         count,
         kind,
@@ -142,21 +134,6 @@ export const logoLayerChargeEndpoint: Endpoint = {
       )
     }
 
-    try {
-      await req.payload.update({
-        collection: 'users',
-        id: userId,
-        overrideAccess: true,
-        context: { systemQuota: true },
-        data: {
-          logoLayerDay: day,
-          logoLayerBatches: used,
-        } as never,
-      })
-    } catch (err) {
-      await creditWallet(req, userId, chargedCents)
-      throw err
-    }
     return Response.json({
       free: false,
       chargedCents,

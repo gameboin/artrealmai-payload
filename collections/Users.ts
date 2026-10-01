@@ -80,6 +80,8 @@ export const Users: CollectionConfig = {
         delete next.logoLayerBatches
         delete next.promptWriterDay
         delete next.promptWriterCount
+        delete next.genFreeDay
+        delete next.genFreeCount
         delete next.enableAPIKey
         delete next.apiKey
         delete next.apiKeyIndex
@@ -112,6 +114,8 @@ export const Users: CollectionConfig = {
           delete row.logoLayerBatches
           delete row.promptWriterDay
           delete row.promptWriterCount
+          delete row.genFreeDay
+          delete row.genFreeCount
         }
         return row
       },
@@ -230,6 +234,19 @@ export const Users: CollectionConfig = {
     },
     {
       name: 'promptWriterCount',
+      type: 'number',
+      defaultValue: 0,
+      access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
+      admin: { hidden: true },
+    },
+    {
+      name: 'genFreeDay',
+      type: 'text',
+      access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },
+      admin: { hidden: true },
+    },
+    {
+      name: 'genFreeCount',
       type: 'number',
       defaultValue: 0,
       access: { ...systemWrite, read: ({ req: { user } }) => isAdmin(user) },

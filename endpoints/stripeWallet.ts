@@ -1,6 +1,6 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
 import Stripe from 'stripe'
-import { creditWallet } from '../lib/wallet'
+import { creditPurchase } from '../lib/wallet'
 
 const PACKS_USD = [5, 15, 40, 100, 500]
 const MIN_CUSTOM_USD = 5
@@ -179,15 +179,10 @@ async function fulfillCheckout(req: PayloadRequest, session: Stripe.Checkout.Ses
     }
   }
 
-  const credited = await creditWallet(req, userId, amountCents)
-  if (!credited) return
-
-  await req.payload.update({
-    collection: 'gen-purchases' as never,
-    id: purchase.id,
-    overrideAccess: true,
-    data: { credited: true } as never,
-  })
+  const result = await creditPurchase(req, purchase.id, userId, amountCents)
+  if (result === 'no-user') {
+    throw new Error('Wallet user was not found for this payment.')
+  }
 }
 
 export const stripeWalletEndpoints: Endpoint[] = [genCheckoutEndpoint, genStripeWebhookEndpoint]
