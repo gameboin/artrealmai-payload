@@ -199,3 +199,15 @@ export function contactRules(req: PayloadRequest, email: string): RateRule[] {
     { scope: 'contact-email', id: email, limit: 5, windowMs: HOUR },
   ]
 }
+
+/**
+ * Outpost reports are public and every create sends inbox mail, so they need
+ * the same treatment as the contact form. Keyed by IP and by realm rather
+ * than by email, since a reporter may not be signed in.
+ */
+export function outpostReportRules(req: PayloadRequest, realm: string): RateRule[] {
+  return [
+    { scope: 'outpost-report-ip', id: clientIp(req), limit: 10, windowMs: HOUR },
+    { scope: 'outpost-report-realm', id: realm, limit: 6, windowMs: HOUR },
+  ]
+}

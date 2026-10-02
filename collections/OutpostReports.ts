@@ -2,6 +2,7 @@ import type { CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 import { adminOnly } from '../lib/access'
 import { notifyInbox } from '../lib/notify'
+import { assertWithinLimits, outpostReportRules } from '../lib/rateLimit'
 
 const REASONS = ['illegal', 'spam', 'other'] as const
 
@@ -20,8 +21,14 @@ export const OutpostReports: CollectionConfig = {
   },
   hooks: {
     beforeValidate: [
-      ({ data }) => {
+      async ({ data, operation, req }) => {
         if (!data) return data
+        // Every create sends inbox mail, so cap the rate before that happens.
+        // The honeypot alone is not a limit.
+        if (operation === 'create' && req.payloadAPI === 'REST') {
+          const realm = typeof data.realm === 'string' ? data.realm : ''
+          await assertWithinLimits(req, outpostReportRules(req, realm))
+        }
         const honey = typeof data.website === 'string' ? data.website.trim() : ''
         if (honey) throw new APIError('Invalid submission.', 400)
         if (typeof data.reason === 'string' && !REASONS.includes(data.reason as (typeof REASONS)[number])) {
