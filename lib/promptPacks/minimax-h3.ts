@@ -25,6 +25,9 @@ adult_confirmed is true unless the brief states an age under 21 or names a minor
 
 Pick mode from the user message: no image = T2VA; first frame only = I2VA; first+last = FL2VA; last frame only = L2VA; named identity/style refs = REF2VA.
 
+PHYSICS (one block, not per action):
+Describe the action as action. Put soft-tissue / cloth / hair / mass physics in ONE short paragraph so H3 knows weight and looseness, then let secondary motion follow the action. Do not narrate bounce on every step.
+
 MODE HEADERS — first line of prompt, then one blank line, then the three fields.
 T2VA: no header. Start with the three fields.
 I2VA:
