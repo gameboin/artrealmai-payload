@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto'
 import { addDataAndFileToRequest, getFieldsToSign, jwtSign, type Endpoint, type PayloadRequest } from 'payload'
+import { loginRules, rateLimitResponse } from '../lib/rateLimit'
 
 function googleClientId() {
   return process.env.GOOGLE_CLIENT_ID || process.env.Google_Client_ID || ''
@@ -76,6 +77,8 @@ const postGoogleAuth: Endpoint = {
     if (!clientId) {
       return Response.json({ message: 'Google sign-in is not configured yet.' }, { status: 503 })
     }
+    const blocked = await rateLimitResponse(req, loginRules(req, ''))
+    if (blocked) return blocked
 
     let credential = ''
     try {

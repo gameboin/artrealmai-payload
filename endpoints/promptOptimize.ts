@@ -1,5 +1,7 @@
 import { addDataAndFileToRequest, type Endpoint, type PayloadRequest } from 'payload'
+import { isAdmin } from '../lib/access'
 import { userIsGenAdmin } from '../lib/genAdmin'
+import { enhanceRules, rateLimitResponse } from '../lib/rateLimit'
 import { deepseekChat, deepseekEnabled } from '../lib/deepseek'
 import { claimDailySlot, creditWallet, debitWallet, releaseDailySlot, walletCents } from '../lib/wallet'
 import { buildOptimizeUserText, isAdminPromptTarget, isBareChatTarget, isPromptTarget, systemPackFor, type PromptTarget } from '../lib/promptPacks'
@@ -137,6 +139,10 @@ export const promptOptimizeEndpoint: Endpoint = {
   handler: async (req: PayloadRequest) => {
     if (!req.user) {
       return Response.json({ message: 'Sign in to use Prompt Writer.' }, { status: 401 })
+    }
+    if (!isAdmin(req.user)) {
+      const blocked = await rateLimitResponse(req, enhanceRules(req, String(req.user.id)))
+      if (blocked) return blocked
     }
     if (!deepseekEnabled()) {
       return Response.json({ message: 'Prompt writer is not wired yet.' }, { status: 503 })

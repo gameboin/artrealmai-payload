@@ -7,6 +7,8 @@ import { makeVideoPosterFromUrl } from '../lib/genThumb'
 import { randomFileName } from '../lib/randomFile'
 import { sweepStaleHolds } from '../lib/holdSweep'
 import { claimGenFormat, creditWallet, debitWallet, releaseReserved, walletCents } from '../lib/wallet'
+import { isAdmin } from '../lib/access'
+import { genVideoRules, rateLimitResponse } from '../lib/rateLimit'
 
 type VideoKey =
   | 'grokvid'
@@ -776,6 +778,10 @@ export const genVideoStartEndpoint: Endpoint = {
   handler: async (req: PayloadRequest) => {
     if (!req.user) {
       return Response.json({ message: 'Sign in to generate.' }, { status: 401 })
+    }
+    if (!isAdmin(req.user)) {
+      const blocked = await rateLimitResponse(req, genVideoRules(req, String(req.user.id)))
+      if (blocked) return blocked
     }
     const falKey = process.env.FAL_KEY || ''
     if (!falKey) {

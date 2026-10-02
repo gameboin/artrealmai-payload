@@ -1,6 +1,7 @@
 import { APIError, type CollectionConfig } from 'payload'
 import { adminOnly } from '../lib/access'
 import { notifyInbox } from '../lib/notify'
+import { assertWithinLimits, contactRules } from '../lib/rateLimit'
 
 const TOPICS = ['Advertising', 'Collaboration', 'Bug Report', 'General'] as const
 
@@ -18,8 +19,12 @@ export const ContactSubmissions: CollectionConfig = {
   },
   hooks: {
     beforeValidate: [
-      ({ data }) => {
+      async ({ data, operation, req }) => {
         if (!data) return data
+        if (operation === 'create' && req.payloadAPI === 'REST') {
+          const email = typeof data.email === 'string' ? data.email : ''
+          await assertWithinLimits(req, contactRules(req, email))
+        }
         const honey = typeof data.website === 'string' ? data.website.trim() : ''
         if (honey) {
           throw new APIError('Invalid submission.', 400)

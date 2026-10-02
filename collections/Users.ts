@@ -1,6 +1,7 @@
 import { APIError, type CollectionConfig } from 'payload'
 import { isAdmin, systemWrite } from '../lib/access'
 import { assertHandle, clipBio, normalizeHandle } from '../lib/handle'
+import { assertWithinLimits, loginRules, registerRules } from '../lib/rateLimit'
 
 export const Users: CollectionConfig = {
   slug: 'users',
@@ -29,11 +30,23 @@ export const Users: CollectionConfig = {
     delete: ({ req: { user } }) => isAdmin(user),
   },
   hooks: {
+    beforeOperation: [
+      async ({ args, operation, req }) => {
+        if (operation === 'login' && req.payloadAPI !== 'local') {
+          const email = typeof args?.data?.email === 'string' ? args.data.email : ''
+          await assertWithinLimits(req, loginRules(req, email))
+        }
+        return args
+      },
+    ],
     beforeValidate: [
-      ({ data }) => {
+      async ({ data, operation, req }) => {
         const password = data && typeof data.password === 'string' ? data.password : ''
         if (password && password.length < 8) {
           throw new APIError('Password must be at least 8 characters.', 400)
+        }
+        if (operation === 'create' && req.payloadAPI === 'REST' && !isAdmin(req.user)) {
+          await assertWithinLimits(req, registerRules(req))
         }
         return data
       },

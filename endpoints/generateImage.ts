@@ -6,6 +6,7 @@ import { userIsGenAdmin } from '../lib/genAdmin'
 import { randomFileName } from '../lib/randomFile'
 import { makeGenThumbFromBuffer } from '../lib/genThumb'
 import { sweepStaleHolds } from '../lib/holdSweep'
+import { genImageRules, rateLimitResponse } from '../lib/rateLimit'
 import {
   claimDailySlot,
   claimGenFormat,
@@ -1021,6 +1022,10 @@ export const genImageEndpoint: Endpoint = {
   handler: async (req: PayloadRequest) => {
     if (!req.user) {
       return Response.json({ message: 'Sign in to generate.' }, { status: 401 })
+    }
+    if (!isAdminUser(req.user as { roles?: string[] })) {
+      const blocked = await rateLimitResponse(req, genImageRules(req, String(req.user.id)))
+      if (blocked) return blocked
     }
     await sweepStaleHolds(req)
 
