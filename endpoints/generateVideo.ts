@@ -13,6 +13,7 @@ import { genVideoRules, rateLimitResponse } from '../lib/rateLimit'
 type VideoKey =
   | 'grokvid'
   | 'grokvid15'
+  | 'grokvid15lite'
   | 'flux3t2vdraft'
   | 'flux3t2v'
   | 'flux3i2vdraft'
@@ -79,6 +80,24 @@ const VIDEO_MODELS: Record<VideoKey, VideoModel> = {
     ],
     aspects: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
     pricePerSec: { '480p': 13, '720p': 22, '1080p': 40 },
+    defaultDuration: 5,
+    defaultResolution: '480p',
+  },
+  grokvid15lite: {
+    key: 'grokvid15lite',
+    label: 'Grok Imagine Video 1.5 Lite',
+    blurb: '1–15s with audio',
+    falT2v: 'xai/grok-imagine-video/v1.5/lite/text-to-video',
+    falI2v: 'xai/grok-imagine-video/v1.5/lite/image-to-video',
+    modes: ['t2v', 'i2v'],
+    durations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    resolutions: [
+      { id: '480p', label: '480p' },
+      { id: '720p', label: '720p' },
+      { id: '1080p', label: '1080p' },
+    ],
+    aspects: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
+    pricePerSec: { '480p': 3, '720p': 5, '1080p': 22 },
     defaultDuration: 5,
     defaultResolution: '480p',
   },
@@ -507,10 +526,12 @@ function videoPayload(model: VideoModel, mode: VideoMode, prompt: string, aspect
     body.resolution = resolution
     body.aspect_ratio = mode === 'i2v' ? 'auto' : aspect
     if (imageUrl) body.image_url = imageUrl
-  } else if (model.key === 'grokvid15') {
+  } else if (model.key === 'grokvid15' || model.key === 'grokvid15lite') {
     body.resolution = resolution
     if (mode === 't2v' && aspect !== 'auto') body.aspect_ratio = aspect
     if (imageUrl) body.image_url = imageUrl
+    // Lite bills each input image. The start frame is the only one this route uses.
+    if (model.key === 'grokvid15lite') return body
   } else {
     body.resolution = resolution
     body.enable_safety_checker = false
